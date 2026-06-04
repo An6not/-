@@ -2,6 +2,37 @@ const PEER_PREFIX = 'fffaa-';
 const SNAPSHOT_RATE_MS = 33;
 const INTERPOLATION_DELAY_MS = 120;
 
+const QUALITY_SETTINGS = {
+    low: {
+        name: 'Низкие',
+        shadows: false,
+        flashlightShadow: false,
+        flashlightShadowMapSize: 256,
+        ceilingLightShadows: false,
+        ceilingLightShadowMapSize: 256,
+        playerSegments: { sphere: 8, cylinder: 8 },
+        fogDensity: 0.018,
+        pixelRatio: 1,
+        antialias: false,
+        simpleMaterials: true
+    },
+    ultra: {
+        name: 'Ультра',
+        shadows: true,
+        flashlightShadow: true,
+        flashlightShadowMapSize: 1024,
+        ceilingLightShadows: true,
+        ceilingLightShadowMapSize: 512,
+        playerSegments: { sphere: 32, cylinder: 24 },
+        fogDensity: 0.012,
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        antialias: true,
+        simpleMaterials: false
+    }
+};
+
+let currentQuality = 'ultra';
+
 const state = {
     mode: 'solo',
     peer: null,
@@ -61,7 +92,9 @@ const el = {
     joystickZone: document.getElementById('joystickZone'),
     jumpBtn: document.getElementById('jumpBtn'),
     flashlightBtn: document.getElementById('flashlightBtn'),
-    fullscreenBtn: document.getElementById('fullscreenBtn')
+    fullscreenBtn: document.getElementById('fullscreenBtn'),
+    qualityLow: document.getElementById('qualityLow'),
+    qualityUltra: document.getElementById('qualityUltra')
 };
 
 function generateRoomCode() {
@@ -203,17 +236,19 @@ function destroyNetwork() {
 }
 
 function initScene() {
+    const q = QUALITY_SETTINGS[currentQuality];
+    
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xa7d7df);
-    scene.fog = new THREE.Fog(0xa7d7df, 55, 115);
+    scene.fog = new THREE.Fog(0xa7d7df, 50, 120);
 
     camera = new THREE.PerspectiveCamera(76, window.innerWidth / window.innerHeight, 0.05, 180);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer = new THREE.WebGLRenderer({ antialias: q.antialias });
+    renderer.setPixelRatio(q.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = q.shadows;
+    renderer.shadowMap.type = q.shadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
     el.canvasWrap.replaceChildren(renderer.domElement);
 
     clock = new THREE.Clock();
@@ -224,20 +259,29 @@ function initScene() {
 }
 
 function addWorld() {
+    const q = QUALITY_SETTINGS[currentQuality];
     const hemi = new THREE.HemisphereLight(0xbfd8df, 0x35413c, 0.34);
     scene.add(hemi);
 
-    const roomMaterial = new THREE.MeshStandardMaterial({ color: 0x6f7b75, roughness: 0.86 });
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x64766b, roughness: 0.9 });
-    const ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x56615d, roughness: 0.82 });
+    let roomMaterial, groundMaterial, ceilingMaterial;
+    if (q.simpleMaterials) {
+        roomMaterial = new THREE.MeshLambertMaterial({ color: 0x6f7b75 });
+        groundMaterial = new THREE.MeshLambertMaterial({ color: 0x64766b });
+        ceilingMaterial = new THREE.MeshLambertMaterial({ color: 0x56615d });
+    } else {
+        roomMaterial = new THREE.MeshStandardMaterial({ color: 0x6f7b75, roughness: 0.86, metalness: 0.02 });
+        groundMaterial = new THREE.MeshStandardMaterial({ color: 0x64766b, roughness: 0.92 });
+        ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x56615d, roughness: 0.82 });
+    }
+    
     const ground = new THREE.Mesh(new THREE.BoxGeometry(120, 1, 120), groundMaterial);
     ground.position.y = -0.5;
-    ground.receiveShadow = true;
+    ground.receiveShadow = q.shadows;
     scene.add(ground);
 
     const ceiling = new THREE.Mesh(new THREE.BoxGeometry(120, 1, 120), ceilingMaterial);
     ceiling.position.y = 10.5;
-    ceiling.receiveShadow = true;
+    ceiling.receiveShadow = q.shadows;
     scene.add(ceiling);
 
     addRoomWall(0, 5, -60, 120, 10, 1, roomMaterial);
@@ -258,21 +302,27 @@ function addWorld() {
 }
 
 function addRoomWall(x, y, z, w, h, d, material) {
+    const q = QUALITY_SETTINGS[currentQuality];
     const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
     wall.position.set(x, y, z);
-    wall.castShadow = true;
-    wall.receiveShadow = true;
+    wall.castShadow = q.shadows;
+    wall.receiveShadow = q.shadows;
     scene.add(wall);
 }
 
 function addCeilingLight(x, y, z) {
-    const light = new THREE.PointLight(0xfff2c7, 0.85, 42, 2);
+    const q = QUALITY_SETTINGS[currentQuality];
+    const light = new THREE.PointLight(0xfff2c7, q.simpleMaterials ? 1.0 : 0.85, 42, 2);
     light.position.set(x, y, z);
-    light.castShadow = true;
+    light.castShadow = q.ceilingLightShadows;
+    if (q.ceilingLightShadows) {
+        light.shadow.mapSize.set(q.ceilingLightShadowMapSize, q.ceilingLightShadowMapSize);
+    }
     scene.add(light);
 
+    const bulbSegments = q.simpleMaterials ? 8 : 16;
     const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.25, 12, 8),
+        new THREE.SphereGeometry(0.25, bulbSegments, bulbSegments),
         new THREE.MeshBasicMaterial({ color: 0xfff2c7 })
     );
     bulb.position.copy(light.position);
@@ -280,12 +330,15 @@ function addCeilingLight(x, y, z) {
 }
 
 function createFlashlight() {
+    const q = QUALITY_SETTINGS[currentQuality];
     flashlightTarget = new THREE.Object3D();
     scene.add(flashlightTarget);
 
     flashlight = new THREE.SpotLight(0xfff1bd, 3.8, 36, Math.PI / 7, 0.4, 1.3);
-    flashlight.castShadow = true;
-    flashlight.shadow.mapSize.set(512, 512); // Оптимизация: меньше карта теней
+    flashlight.castShadow = q.flashlightShadow;
+    if (q.flashlightShadow) {
+        flashlight.shadow.mapSize.set(q.flashlightShadowMapSize, q.flashlightShadowMapSize);
+    }
     flashlight.target = flashlightTarget;
     scene.add(flashlight);
 }
@@ -306,24 +359,34 @@ function makePlayers() {
 }
 
 function createPlayer(color, x, z) {
+    const q = QUALITY_SETTINGS[currentQuality];
     const group = new THREE.Group();
-    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.02 });
-    const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x111820, roughness: 0.55 });
-    const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45 });
+    
+    let material, darkMaterial, trimMaterial;
+    if (q.simpleMaterials) {
+        material = new THREE.MeshLambertMaterial({ color });
+        darkMaterial = new THREE.MeshLambertMaterial({ color: 0x111820 });
+        trimMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    } else {
+        material = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.02 });
+        darkMaterial = new THREE.MeshStandardMaterial({ color: 0x111820, roughness: 0.55 });
+        trimMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45 });
+    }
 
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 1.25, 18), material);
+    const segs = q.playerSegments;
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 1.25, segs.cylinder), material);
     body.position.y = 0.78;
-    body.castShadow = true;
+    body.castShadow = q.shadows;
     group.add(body);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 14), material);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, segs.sphere, segs.sphere), material);
     head.position.y = 1.58;
-    head.castShadow = true;
+    head.castShadow = q.shadows;
     group.add(head);
 
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.22, 14), material);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.22, Math.max(8, segs.cylinder / 2)), material);
     neck.position.y = 1.28;
-    neck.castShadow = true;
+    neck.castShadow = q.shadows;
     group.add(neck);
 
     const face = new THREE.Mesh(
@@ -340,7 +403,7 @@ function createPlayer(color, x, z) {
     const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.82, 0.2), material);
     leftArm.position.set(-0.54, 0.84, -0.02);
     leftArm.rotation.z = 0.14;
-    leftArm.castShadow = true;
+    leftArm.castShadow = q.shadows;
     group.add(leftArm);
 
     const rightArm = leftArm.clone();
@@ -350,7 +413,7 @@ function createPlayer(color, x, z) {
 
     const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.72, 0.24), material);
     leftLeg.position.set(-0.18, 0.28, 0);
-    leftLeg.castShadow = true;
+    leftLeg.castShadow = q.shadows;
     group.add(leftLeg);
 
     const rightLeg = leftLeg.clone();
@@ -701,6 +764,9 @@ function lookBy(deltaX, deltaY, multiplier = 1) {
 }
 
 function bindEvents() {
+    el.qualityLow.addEventListener('click', () => setQuality('low'));
+    el.qualityUltra.addEventListener('click', () => setQuality('ultra'));
+    
     el.soloBtn.addEventListener('click', () => startGame('solo'));
     el.createRoomBtn.addEventListener('click', hostRoom);
     el.joinRoomBtn.addEventListener('click', showJoinPanel);
@@ -712,32 +778,40 @@ function bindEvents() {
     el.roomCodeInput.addEventListener('input', () => {
         el.roomCodeInput.value = el.roomCodeInput.value.replace(/\D/g, '').slice(0, 5);
     });
-
-    document.addEventListener('keydown', (event) => setKey(event, true));
-    document.addEventListener('keyup', (event) => setKey(event, false));
-
-    document.addEventListener('pointerlockchange', () => {
-        state.pointerLocked = document.pointerLockElement === renderer?.domElement;
-    });
-    document.addEventListener('mousemove', (event) => {
-        if (state.pointerLocked) lookBy(event.movementX, event.movementY);
-    });
-
-    el.gameContainer.addEventListener('pointerdown', (event) => {
-        if (!state.running) return;
-        if (event.target.closest('#hud') || event.target.closest('#mobileControls') || event.target.closest('#joystickZone')) return;
-        requestPointerLock();
-    });
-
-    el.gameContainer.addEventListener('touchstart', handleLookTouchStart, { passive: false });
-    el.gameContainer.addEventListener('touchmove', handleLookTouchMove, { passive: false });
-    el.gameContainer.addEventListener('touchend', handleLookTouchEnd, { passive: false });
-    el.gameContainer.addEventListener('touchcancel', handleLookTouchEnd, { passive: false });
-
-    bindHoldButton(el.jumpBtn, (pressed) => {
-        state.keys.jump = pressed;
-    });
 }
+
+function setQuality(quality) {
+    currentQuality = quality;
+    el.qualityLow.classList.toggle('active', quality === 'low');
+    el.qualityUltra.classList.toggle('active', quality === 'ultra');
+}
+
+bindEvents();
+
+document.addEventListener('keydown', (event) => setKey(event, true));
+document.addEventListener('keyup', (event) => setKey(event, false));
+
+document.addEventListener('pointerlockchange', () => {
+    state.pointerLocked = document.pointerLockElement === renderer?.domElement;
+});
+document.addEventListener('mousemove', (event) => {
+    if (state.pointerLocked) lookBy(event.movementX, event.movementY);
+});
+
+el.gameContainer.addEventListener('pointerdown', (event) => {
+    if (!state.running) return;
+    if (event.target.closest('#hud') || event.target.closest('#mobileControls') || event.target.closest('#joystickZone')) return;
+    requestPointerLock();
+});
+
+el.gameContainer.addEventListener('touchstart', handleLookTouchStart, { passive: false });
+el.gameContainer.addEventListener('touchmove', handleLookTouchMove, { passive: false });
+el.gameContainer.addEventListener('touchend', handleLookTouchEnd, { passive: false });
+el.gameContainer.addEventListener('touchcancel', handleLookTouchEnd, { passive: false });
+
+bindHoldButton(el.jumpBtn, (pressed) => {
+    state.keys.jump = pressed;
+});
 
 function bindHoldButton(button, onChange) {
     button.addEventListener('pointerdown', (event) => {
