@@ -232,6 +232,11 @@ button {
     backdrop-filter: blur(10px);
 }
 
+.roundBtn.active {
+    background: rgba(255, 246, 196, 0.92);
+    border-color: rgba(207, 170, 68, 0.65);
+}
+
 #fullscreenBtn {
     font-size: 28px;
 }
@@ -267,8 +272,8 @@ button {
     }
 
     .roundBtn {
-        width: 66px;
-        height: 66px;
+        width: 62px;
+        height: 62px;
         font-size: 14px;
     }
 }

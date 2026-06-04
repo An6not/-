@@ -9,6 +9,7 @@ const state = {
     roomCode: null,
     running: false,
     pointerLocked: false,
+    flashlightOn: true,
     lastNetSend: 0,
     sequence: 0,
     walkTime: 0,
@@ -34,6 +35,10 @@ let clock;
 let localPlayer;
 let remotePlayer;
 let joystick;
+let flashlight;
+let flashlightTarget;
+let flashlightPosition = new THREE.Vector3();
+let flashlightDirection = new THREE.Vector3(0, 0, -1);
 let worldBounds = { x: 58, z: 58 };
 
 const el = {
@@ -54,6 +59,7 @@ const el = {
     leaveBtn: document.getElementById('leaveBtn'),
     joystickZone: document.getElementById('joystickZone'),
     jumpBtn: document.getElementById('jumpBtn'),
+    flashlightBtn: document.getElementById('flashlightBtn'),
     fullscreenBtn: document.getElementById('fullscreenBtn')
 };
 
@@ -211,35 +217,76 @@ function initScene() {
 
     clock = new THREE.Clock();
     addWorld();
+    createFlashlight();
     makePlayers();
     window.addEventListener('resize', resizeRenderer);
 }
 
 function addWorld() {
-    const hemi = new THREE.HemisphereLight(0xf4feff, 0x5a7064, 1.08);
+    const hemi = new THREE.HemisphereLight(0xbfd8df, 0x35413c, 0.34);
     scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-    sun.position.set(20, 26, 14);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -64;
-    sun.shadow.camera.right = 64;
-    sun.shadow.camera.top = 64;
-    sun.shadow.camera.bottom = -64;
-    scene.add(sun);
-
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x70b77a, roughness: 0.9 });
+    const roomMaterial = new THREE.MeshStandardMaterial({ color: 0x6f7b75, roughness: 0.86 });
+    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x64766b, roughness: 0.9 });
+    const ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x56615d, roughness: 0.82 });
     const ground = new THREE.Mesh(new THREE.BoxGeometry(120, 1, 120), groundMaterial);
     ground.position.y = -0.5;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const grid = new THREE.GridHelper(120, 60, 0xffffff, 0xffffff);
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(120, 1, 120), ceilingMaterial);
+    ceiling.position.y = 10.5;
+    ceiling.receiveShadow = true;
+    scene.add(ceiling);
+
+    addRoomWall(0, 5, -60, 120, 10, 1, roomMaterial);
+    addRoomWall(0, 5, 60, 120, 10, 1, roomMaterial);
+    addRoomWall(-60, 5, 0, 1, 10, 120, roomMaterial);
+    addRoomWall(60, 5, 0, 1, 10, 120, roomMaterial);
+
+    const grid = new THREE.GridHelper(118, 59, 0xffffff, 0xffffff);
     grid.position.y = 0.015;
-    grid.material.opacity = 0.16;
+    grid.material.opacity = 0.11;
     grid.material.transparent = true;
     scene.add(grid);
+
+    addCeilingLight(-28, 9.7, -28);
+    addCeilingLight(28, 9.7, -28);
+    addCeilingLight(-28, 9.7, 28);
+    addCeilingLight(28, 9.7, 28);
+}
+
+function addRoomWall(x, y, z, w, h, d, material) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+    wall.position.set(x, y, z);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    scene.add(wall);
+}
+
+function addCeilingLight(x, y, z) {
+    const light = new THREE.PointLight(0xfff2c7, 0.85, 42, 2);
+    light.position.set(x, y, z);
+    light.castShadow = true;
+    scene.add(light);
+
+    const bulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 12, 8),
+        new THREE.MeshBasicMaterial({ color: 0xfff2c7 })
+    );
+    bulb.position.copy(light.position);
+    scene.add(bulb);
+}
+
+function createFlashlight() {
+    flashlightTarget = new THREE.Object3D();
+    scene.add(flashlightTarget);
+
+    flashlight = new THREE.SpotLight(0xfff1bd, 3.8, 36, Math.PI / 7.5, 0.45, 1.2);
+    flashlight.castShadow = true;
+    flashlight.shadow.mapSize.set(1024, 1024);
+    flashlight.target = flashlightTarget;
+    scene.add(flashlight);
 }
 
 function makePlayers() {
@@ -318,9 +365,9 @@ function createPlayer(color, x, z) {
         velocity: new THREE.Vector3(),
         radius: 0.42,
         eyeHeight: 1.62,
-        speed: 8.5,
-        sprintSpeed: 12,
-        jump: 7.5,
+        speed: 5.4,
+        sprintSpeed: 7.3,
+        jump: 6.8,
         onGround: true,
         visible: true,
         buffer: []
@@ -365,6 +412,8 @@ function endGame() {
     clock = null;
     localPlayer = null;
     remotePlayer = null;
+    flashlight = null;
+    flashlightTarget = null;
     resetInput();
 
     el.gameContainer.classList.add('hidden');
@@ -477,19 +526,39 @@ function updateCamera() {
     const p = localPlayer.mesh.position;
     const moving = Math.hypot(localPlayer.velocity.x, localPlayer.velocity.z);
     if (localPlayer.onGround && moving > 0.2) {
-        state.walkTime += moving * 0.018;
+        state.walkTime += moving * 0.011;
     } else {
         state.walkTime *= 0.9;
     }
 
     const bobPower = localPlayer.onGround ? THREE.MathUtils.clamp(moving / localPlayer.sprintSpeed, 0, 1) : 0;
-    const bobY = Math.sin(state.walkTime * 10) * 0.045 * bobPower;
-    const bobX = Math.sin(state.walkTime * 5) * 0.022 * bobPower;
+    const bobY = Math.sin(state.walkTime * 7) * 0.018 * bobPower;
+    const bobX = Math.sin(state.walkTime * 3.5) * 0.01 * bobPower;
 
     camera.position.set(p.x + bobX, p.y + localPlayer.eyeHeight + bobY, p.z);
     camera.rotation.order = 'YXZ';
     camera.rotation.y = state.yaw;
-    camera.rotation.x = state.pitch + Math.sin(state.walkTime * 10 + 0.8) * 0.006 * bobPower;
+    camera.rotation.x = state.pitch + Math.sin(state.walkTime * 7 + 0.8) * 0.0025 * bobPower;
+}
+
+function updateFlashlight(dt) {
+    if (!flashlight || !flashlightTarget || !camera) return;
+
+    const desiredDirection = new THREE.Vector3();
+    camera.getWorldDirection(desiredDirection);
+
+    const desiredPosition = camera.position.clone()
+        .add(new THREE.Vector3(0, -0.18, 0))
+        .addScaledVector(desiredDirection, 0.18);
+
+    const posAlpha = 1 - Math.pow(0.001, dt);
+    const dirAlpha = 1 - Math.pow(0.01, dt);
+    flashlightPosition.lerp(desiredPosition, posAlpha);
+    flashlightDirection.lerp(desiredDirection, dirAlpha).normalize();
+
+    flashlight.position.copy(flashlightPosition);
+    flashlightTarget.position.copy(flashlightPosition).addScaledVector(flashlightDirection, 20);
+    flashlight.intensity = state.flashlightOn ? 3.8 : 0;
 }
 
 function updateRemotePlayer(now) {
@@ -511,6 +580,7 @@ function updateRemotePlayer(now) {
         const t = THREE.MathUtils.clamp((renderTime - a.time) / (b.time - a.time || 1), 0, 1);
         targetPosition = a.position.clone().lerp(b.position, smoothstep(t));
         targetYaw = lerpAngle(a.yaw, b.yaw, t);
+        remotePlayer.velocity.copy(a.velocity).lerp(b.velocity, t);
     } else {
         const latest = buffer[buffer.length - 1];
         const dt = Math.min((renderTime - latest.time) / 1000, 0.12);
@@ -568,6 +638,7 @@ function loop(now) {
 
     updateLocalPlayer(dt);
     updateCamera();
+    updateFlashlight(dt);
     updateRemotePlayer(now);
     sendPlayerSnapshot(now);
 
@@ -588,6 +659,11 @@ function toggleFullscreen() {
     } else {
         document.exitFullscreen().catch(console.warn);
     }
+}
+
+function toggleFlashlight() {
+    state.flashlightOn = !state.flashlightOn;
+    el.flashlightBtn?.classList.toggle('active', state.flashlightOn);
 }
 
 function requestPointerLock() {
@@ -616,6 +692,7 @@ function bindEvents() {
     el.joinBtn.addEventListener('click', joinRoom);
     el.leaveBtn.addEventListener('click', endGame);
     el.fullscreenBtn.addEventListener('click', toggleFullscreen);
+    el.flashlightBtn?.addEventListener('click', toggleFlashlight);
 
     el.roomCodeInput.addEventListener('input', () => {
         el.roomCodeInput.value = el.roomCodeInput.value.replace(/\D/g, '').slice(0, 5);
@@ -710,6 +787,7 @@ function setKey(event, pressed) {
         state.keys.jump = pressed;
         event.preventDefault();
     }
+    if (code === 'KeyF' && pressed && !event.repeat) toggleFlashlight();
     if (code === 'ShiftLeft' || code === 'ShiftRight') state.keys.sprint = pressed;
 }
 
