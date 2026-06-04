@@ -34,15 +34,50 @@ function validateRoomCode(code) {
 function initPeer(customId = null) {
     connectionRetries = 0;
     
+    // Try multiple PeerJS server configurations
+    const serverConfigs = [
+        {
+            host: '0.peerjs.com',
+            port: 443,
+            path: '/',
+            secure: true
+        },
+        {
+            host: 'peerjs.server.herokuapp.com',
+            port: 443,
+            path: '/',
+            secure: true
+        }
+    ];
+    
     const peerOptions = {
-        debug: 1
+        debug: 2,
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ]
+        }
     };
+    
+    // Add server config
+    Object.assign(peerOptions, serverConfigs[0]);
     
     if (customId) {
         peerOptions.id = customId;
     }
     
-    peer = new Peer(peerOptions);
+    console.log('Attempting to connect with config:', peerOptions);
+    
+    try {
+        peer = new Peer(peerOptions);
+    } catch (e) {
+        console.error('Peer creation error:', e);
+        alert('Ошибка создания P2P соединения. Попробуйте другой браузер.');
+        return;
+    }
     
     peer.on('open', (id) => {
         console.log('Connected with ID:', id);
@@ -50,8 +85,27 @@ function initPeer(customId = null) {
             roomCode = generateRoomCode();
             document.getElementById('roomCode').textContent = roomCode;
             document.getElementById('roomCodeDisplay').style.display = 'block';
+            document.getElementById('roomCodeDisplay').innerHTML = `
+                <p>Код вашей комнаты: <strong id="roomCode">${roomCode}</strong></p>
+                <p>Ожидание игрока...</p>
+                <p style="font-size: 12px; color: #666;">ID: ${id}</p>
+            `;
         }
     });
+    
+    // Add connection timeout
+    setTimeout(() => {
+        if (peer && !peer.id) {
+            console.log('Connection timeout, retrying...');
+            if (connectionRetries < maxRetries) {
+                connectionRetries++;
+                peer.destroy();
+                initPeer(customId);
+            } else {
+                alert('Не удалось подключиться к серверу PeerJS. Проверьте интернет-соединение или попробуйте позже.');
+            }
+        }
+    }, 10000);
     
     peer.on('connection', (connection) => {
         if (isHost && !conn) {
@@ -69,8 +123,14 @@ function initPeer(customId = null) {
             initPeer(newId);
         } else if (err.type === 'peer-unavailable') {
             alert('Игрок не найден. Проверьте код комнаты.');
+        } else if (err.type === 'server-error' || err.type === 'network') {
+            alert('Ошибка соединения с сервером PeerJS.\n\nВозможные причины:\n1. Сервер PeerJS временно недоступен\n2. Брандмауэр блокирует соединение\n3. Проблемы с интернетом\n\nПопробуйте снова через несколько минут.');
+        } else if (err.type === 'disconnected') {
+            alert('Соединение с сервером потеряно. Проверьте интернет.');
+        } else if (err.type === 'ssl-unavailable') {
+            alert('SSL недоступен. Попробуйте использовать HTTPS.');
         } else {
-            alert('Ошибка соединения: ' + err.message);
+            alert('Ошибка соединения (' + err.type + '): ' + err.message);
         }
     });
 }
