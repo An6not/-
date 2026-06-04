@@ -37,7 +37,13 @@ const QUALITY_SETTINGS = {
     }
 };
 
-let currentQuality = 'ultra';
+// Определяем тип устройства
+const isMobileDevice = () => {
+    return navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches;
+};
+
+// По умолчанию: на телефоне - низкие, на ПК - ультра
+let currentQuality = isMobileDevice() ? 'low' : 'ultra';
 
 const state = {
     mode: 'solo',
@@ -272,20 +278,20 @@ function initScene() {
 
 function addWorld() {
     const q = QUALITY_SETTINGS[currentQuality];
-    const hemi = new THREE.HemisphereLight(0xbfd8df, 0x35413c, 0.34);
+    const hemi = new THREE.HemisphereLight(0xbfd8df, 0x35413c, 0.28);
     scene.add(hemi);
 
     let wallMaterial, floorMaterial, ceilingMaterial, trimMaterial;
     if (q.simpleMaterials) {
-        wallMaterial = new THREE.MeshLambertMaterial({ color: 0x7a8b82 });
-        floorMaterial = new THREE.MeshLambertMaterial({ color: 0x5a6860 });
-        ceilingMaterial = new THREE.MeshLambertMaterial({ color: 0x56615d });
-        trimMaterial = new THREE.MeshLambertMaterial({ color: 0x3a4540 });
+        wallMaterial = new THREE.MeshLambertMaterial({ color: 0x6a7870 });
+        floorMaterial = new THREE.MeshLambertMaterial({ color: 0x4a5850 });
+        ceilingMaterial = new THREE.MeshLambertMaterial({ color: 0x5a6860 });
+        trimMaterial = new THREE.MeshLambertMaterial({ color: 0x8a9a92 });
     } else {
-        wallMaterial = new THREE.MeshStandardMaterial({ color: 0x7a8b82, roughness: 0.86, metalness: 0.01 });
-        floorMaterial = new THREE.MeshStandardMaterial({ color: 0x5a6860, roughness: 0.92 });
-        ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x56615d, roughness: 0.82 });
-        trimMaterial = new THREE.MeshStandardMaterial({ color: 0x3a4540, roughness: 0.85 });
+        wallMaterial = new THREE.MeshStandardMaterial({ color: 0x6a7870, roughness: 0.88, metalness: 0.02 });
+        floorMaterial = new THREE.MeshStandardMaterial({ color: 0x4a5850, roughness: 0.94 });
+        ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x5a6860, roughness: 0.84 });
+        trimMaterial = new THREE.MeshStandardMaterial({ color: 0x8a9a92, roughness: 0.86 });
     }
 
     // 1 этаж (нижний)
@@ -294,24 +300,24 @@ function addWorld() {
     floor1.receiveShadow = q.shadows;
     scene.add(floor1);
 
-    // Перекрытие между этажами (делаем из 4 частей, чтобы создать проем)
-    const floorPart1 = new THREE.Mesh(new THREE.BoxGeometry(52, 1, 120), floorMaterial);
-    floorPart1.position.set(-34, 5.5, 0);
+    // Перекрытие между этажами (4 части, большой проем посередине)
+    const floorPart1 = new THREE.Mesh(new THREE.BoxGeometry(50, 1, 120), floorMaterial);
+    floorPart1.position.set(-35, 5.5, 0);
     floorPart1.receiveShadow = q.shadows;
     scene.add(floorPart1);
 
-    const floorPart2 = new THREE.Mesh(new THREE.BoxGeometry(52, 1, 120), floorMaterial);
-    floorPart2.position.set(34, 5.5, 0);
+    const floorPart2 = new THREE.Mesh(new THREE.BoxGeometry(50, 1, 120), floorMaterial);
+    floorPart2.position.set(35, 5.5, 0);
     floorPart2.receiveShadow = q.shadows;
     scene.add(floorPart2);
 
-    const floorPart3 = new THREE.Mesh(new THREE.BoxGeometry(16, 1, 52), floorMaterial);
-    floorPart3.position.set(0, 5.5, -34);
+    const floorPart3 = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 50), floorMaterial);
+    floorPart3.position.set(0, 5.5, -35);
     floorPart3.receiveShadow = q.shadows;
     scene.add(floorPart3);
 
-    const floorPart4 = new THREE.Mesh(new THREE.BoxGeometry(16, 1, 52), floorMaterial);
-    floorPart4.position.set(0, 5.5, 34);
+    const floorPart4 = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 50), floorMaterial);
+    floorPart4.position.set(0, 5.5, 35);
     floorPart4.receiveShadow = q.shadows;
     scene.add(floorPart4);
     
@@ -321,67 +327,83 @@ function addWorld() {
     ceiling.receiveShadow = q.shadows;
     scene.add(ceiling);
 
-    // Наружные стены
-    addRoomWall(0, 3, -60, 120, 6, 1, wallMaterial); // 1 этаж
-    addRoomWall(0, 9, -60, 120, 6, 1, wallMaterial); // 2 этаж
-    addRoomWall(0, 3, 60, 120, 6, 1, wallMaterial);
-    addRoomWall(0, 9, 60, 120, 6, 1, wallMaterial);
-    addRoomWall(-60, 3, 0, 1, 6, 120, wallMaterial);
-    addRoomWall(-60, 9, 0, 1, 6, 120, wallMaterial);
-    addRoomWall(60, 3, 0, 1, 6, 120, wallMaterial);
-    addRoomWall(60, 9, 0, 1, 6, 120, wallMaterial);
+    // Наружные стены - оптимизируем: объединяем 2 этажа в один элемент
+    addRoomWall(0, 6, -60, 120, 12, 1, wallMaterial);
+    addRoomWall(0, 6, 60, 120, 12, 1, wallMaterial);
+    addRoomWall(-60, 6, 0, 1, 12, 120, wallMaterial);
+    addRoomWall(60, 6, 0, 1, 12, 120, wallMaterial);
 
-    // Внутренние стены для структуры
-    addRoomWall(0, 3, 0, 100, 6, 0.5, wallMaterial); // Центральная стена на 1 этаже
-    addRoomWall(0, 9, 0, 100, 6, 0.5, wallMaterial); // Центральная стена на 2 этаже
-    addRoomWall(-30, 3, -30, 60, 6, 0.5, wallMaterial);
-    addRoomWall(-30, 9, -30, 60, 6, 0.5, wallMaterial);
-    addRoomWall(30, 3, 30, 60, 6, 0.5, wallMaterial);
-    addRoomWall(30, 9, 30, 60, 6, 0.5, wallMaterial);
-
-    // Дверные проемы (пустые места в стенах)
-    addRoomWall(35, 3, -10, 30, 6, 0.5, wallMaterial); // Часть стены
-    addRoomWall(5, 3, -10, 30, 6, 0.5, wallMaterial); // Другая часть
-
-    // Платформы для прыжков между этажами (маленькие подставки)
-    const platformMat = q.simpleMaterials ? new THREE.MeshLambertMaterial({ color: 0x8b9a92 }) : new THREE.MeshStandardMaterial({ color: 0x8b9a92, roughness: 0.9 });
+    // Внутренние стены - аккуратная структура
+    // Центральные стены по вертикали
+    addRoomWall(0, 3, 0, 10, 6, 0.6, wallMaterial); // 1 этаж, центр
+    addRoomWall(0, 9, 0, 10, 6, 0.6, wallMaterial); // 2 этаж, центр
     
-    const p1 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 6), platformMat);
-    p1.position.set(-10, 1.75, 0);
+    // Дополнительные внутренние стены для комнат
+    addRoomWall(-25, 3, -25, 50, 6, 0.4, wallMaterial);
+    addRoomWall(-25, 9, -25, 50, 6, 0.4, wallMaterial);
+    addRoomWall(25, 3, 25, 50, 6, 0.4, wallMaterial);
+    addRoomWall(25, 9, 25, 50, 6, 0.4, wallMaterial);
+    
+    // Дверные проемы - аккуратные
+    addRoomWall(-30, 3, 0, 40, 6, 0.4, wallMaterial);
+    addRoomWall(10, 3, 0, 40, 6, 0.4, wallMaterial);
+    addRoomWall(-30, 9, 0, 40, 6, 0.4, wallMaterial);
+    addRoomWall(10, 9, 0, 40, 6, 0.4, wallMaterial);
+
+    // Платформы для подъема - аккуратные, по обе стороны от проема
+    const platformMat = q.simpleMaterials ? new THREE.MeshLambertMaterial({ color: 0x9aab92 }) : new THREE.MeshStandardMaterial({ color: 0x9aab92, roughness: 0.88 });
+    
+    // Левая лестница/платформы
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 8), platformMat);
+    p1.position.set(-15, 1.8, 0);
     p1.castShadow = p1.receiveShadow = q.shadows;
     scene.add(p1);
 
-    const p2 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 6), platformMat);
-    p2.position.set(-10, 3.75, 0);
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 8), platformMat);
+    p2.position.set(-15, 3.8, 0);
     p2.castShadow = p2.receiveShadow = q.shadows;
     scene.add(p2);
 
-    const p3 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 6), platformMat);
-    p3.position.set(10, 3, 0);
+    const p3 = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 8), platformMat);
+    p3.position.set(-15, 5.8, 0);
     p3.castShadow = p3.receiveShadow = q.shadows;
     scene.add(p3);
 
-    const p4 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 6), platformMat);
-    p4.position.set(10, 5, 0);
+    // Правая лестница/платформы
+    const p4 = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 8), platformMat);
+    p4.position.set(15, 2.2, 0);
     p4.castShadow = p4.receiveShadow = q.shadows;
     scene.add(p4);
 
-    const grid = new THREE.GridHelper(118, 59, 0xffffff, 0xffffff);
-    grid.position.y = 0.015;
-    grid.material.opacity = 0.11;
-    grid.material.transparent = true;
-    scene.add(grid);
+    const p5 = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 8), platformMat);
+    p5.position.set(15, 4.2, 0);
+    p5.castShadow = p5.receiveShadow = q.shadows;
+    scene.add(p5);
 
-    // Добавляем лампы на 2 этажа
-    addCeilingLight(-28, 4.7, -28); // 1 этаж
-    addCeilingLight(28, 4.7, -28);
-    addCeilingLight(-28, 4.7, 28);
-    addCeilingLight(28, 4.7, 28);
-    addCeilingLight(-28, 10.7, -28); // 2 этаж
-    addCeilingLight(28, 10.7, -28);
-    addCeilingLight(-28, 10.7, 28);
-    addCeilingLight(28, 10.7, 28);
-    addCeilingLight(0, 4.7, 0); // Центр
+    const p6 = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 8), platformMat);
+    p6.position.set(15, 5.8, 0);
+    p6.castShadow = p6.receiveShadow = q.shadows;
+    scene.add(p6);
+
+    // Оптимизируем сетку - только на Ультра
+    if (!q.simpleMaterials) {
+        const grid = new THREE.GridHelper(118, 59, 0xffffff, 0xffffff);
+        grid.position.y = 0.015;
+        grid.material.opacity = 0.08;
+        grid.material.transparent = true;
+        scene.add(grid);
+    }
+
+    // Лампы - оптимизируем, используем меньше, но ярче
+    addCeilingLight(-25, 4.7, -25); // 1 этаж
+    addCeilingLight(25, 4.7, -25);
+    addCeilingLight(-25, 4.7, 25);
+    addCeilingLight(25, 4.7, 25);
+    addCeilingLight(0, 4.7, 0);
+    addCeilingLight(-25, 10.7, -25); // 2 этаж
+    addCeilingLight(25, 10.7, -25);
+    addCeilingLight(-25, 10.7, 25);
+    addCeilingLight(25, 10.7, 25);
     addCeilingLight(0, 10.7, 0);
 }
 
@@ -668,8 +690,8 @@ function collideArena(player) {
     p.z = THREE.MathUtils.clamp(p.z, -worldBounds.z, worldBounds.z);
 
     // Определяем, находится ли игрок в области проема между этажами
-    const inHoleX = Math.abs(p.x) < 7; // +/- 7 от центра
-    const inHoleZ = Math.abs(p.z) < 5; // +/- 5 от центра
+    const inHoleX = Math.abs(p.x) < 8; // +/- 8 от центра
+    const inHoleZ = Math.abs(p.z) < 6; // +/- 6 от центра
     const inHole = inHoleX && inHoleZ;
 
     let onGround = false;
@@ -682,7 +704,7 @@ function collideArena(player) {
     } 
     // Проверка пола 2 этажа (только если не в проеме)
     else if (p.y <= 6 && p.y > 0 && !inHole) {
-        if (v.y <= 0) { // Падаем на пол 2 этажа
+        if (v.y <= 0) {
             p.y = 6;
             v.y = 0;
             onGround = true;
@@ -691,18 +713,19 @@ function collideArena(player) {
     // Проверка платформ
     else {
         const platforms = [
-            { x: -10, y: 1.75, z: 0, w: 8, h: 0.5, d: 6 },
-            { x: -10, y: 3.75, z: 0, w: 8, h: 0.5, d: 6 },
-            { x: 10, y: 3, z: 0, w: 8, h: 0.5, d: 6 },
-            { x: 10, y: 5, z: 0, w: 8, h: 0.5, d: 6 }
+            { x: -15, y: 1.8, z: 0, w: 10, h: 0.6, d: 8 },
+            { x: -15, y: 3.8, z: 0, w: 10, h: 0.6, d: 8 },
+            { x: -15, y: 5.8, z: 0, w: 10, h: 0.6, d: 8 },
+            { x: 15, y: 2.2, z: 0, w: 10, h: 0.6, d: 8 },
+            { x: 15, y: 4.2, z: 0, w: 10, h: 0.6, d: 8 },
+            { x: 15, y: 5.8, z: 0, w: 10, h: 0.6, d: 8 }
         ];
         
         for (let plat of platforms) {
-            // Проверка столкновения с платформой
             const platTop = plat.y + plat.h / 2;
             if (Math.abs(p.x - plat.x) < plat.w / 2 &&
                 Math.abs(p.z - plat.z) < plat.d / 2 &&
-                p.y <= platTop + 0.1 && p.y > plat.y && v.y <= 0) {
+                p.y <= platTop + 0.15 && p.y > plat.y && v.y <= 0) {
                 p.y = platTop;
                 v.y = 0;
                 onGround = true;
@@ -928,6 +951,9 @@ function setQuality(quality) {
 }
 
 bindEvents();
+
+// Инициализируем активную кнопку качества при загрузке
+setQuality(currentQuality);
 
 document.addEventListener('keydown', (event) => setKey(event, true));
 document.addEventListener('keyup', (event) => setKey(event, false));

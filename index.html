@@ -11,31 +11,35 @@
 </head>
 <body>
     <main id="mainMenu" class="menu">
-        <h1>fffaa 3D</h1>
-        <p class="subtitle">P2P-поле от первого лица с кодом на 5 цифр</p>
+        <div class="menu-content">
+            <h1>fffaa 3D</h1>
+            <p class="subtitle">P2P-поле от первого лица с кодом на 5 цифр</p>
 
-        <div class="quality-selector">
-            <p class="label">Уровень графики:</p>
-            <div class="quality-buttons">
-                <button id="qualityLow" class="quality-btn">Низкие</button>
-                <button id="qualityUltra" class="quality-btn active">Ультра</button>
+            <div class="quality-selector">
+                <p class="label">Графика:</p>
+                <div class="quality-buttons">
+                    <button id="qualityLow" class="quality-btn">Низкие</button>
+                    <button id="qualityUltra" class="quality-btn">Ультра</button>
+                </div>
             </div>
+
+            <div class="menu-buttons">
+                <button id="soloBtn" class="primary">Играть одному</button>
+                <button id="createRoomBtn">Создать комнату</button>
+                <button id="joinRoomBtn">Подключиться</button>
+            </div>
+
+            <section id="joinRoomSection" class="panel hidden">
+                <input id="roomCodeInput" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="12345" autocomplete="off">
+                <button id="joinBtn" class="primary">Войти по коду</button>
+            </section>
+
+            <section id="roomCodeDisplay" class="panel hidden">
+                <div class="label">Код комнаты</div>
+                <strong id="roomCode">-----</strong>
+                <p id="connectionStatus">Ожидание второго игрока...</p>
+            </section>
         </div>
-
-        <button id="soloBtn" class="primary">Играть одному</button>
-        <button id="createRoomBtn">Создать комнату</button>
-        <button id="joinRoomBtn">Подключиться</button>
-
-        <section id="joinRoomSection" class="panel hidden">
-            <input id="roomCodeInput" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="12345" autocomplete="off">
-            <button id="joinBtn" class="primary">Войти по коду</button>
-        </section>
-
-        <section id="roomCodeDisplay" class="panel hidden">
-            <div class="label">Код комнаты</div>
-            <strong id="roomCode">-----</strong>
-            <p id="connectionStatus">Ожидание второго игрока...</p>
-        </section>
     </main>
 
     <section id="gameContainer" class="hidden" aria-label="Игровая сцена">
