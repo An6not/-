@@ -49,9 +49,9 @@ button {
     gap: 12px;
     padding: 24px;
     background:
-        linear-gradient(rgba(217, 238, 240, 0.78), rgba(241, 246, 232, 0.9)),
-        radial-gradient(circle at 70% 25%, rgba(255, 213, 128, 0.45), transparent 32%),
-        linear-gradient(135deg, #9ed4df, #dfe8bd 58%, #f0c98b);
+        linear-gradient(rgba(122, 139, 146, 0.85), rgba(122, 139, 146, 0.9)),
+        radial-gradient(circle at 70% 25%, rgba(255, 200, 120, 0.4), transparent 40%),
+        linear-gradient(135deg, #5a6860, #7a8b82 58%, #8b9a92);
 }
 
 .menu h1 {

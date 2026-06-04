@@ -8,26 +8,32 @@ const QUALITY_SETTINGS = {
         shadows: false,
         flashlightShadow: false,
         flashlightShadowMapSize: 256,
+        flashlightAngle: Math.PI / 6, // Шире конус
         ceilingLightShadows: false,
         ceilingLightShadowMapSize: 256,
         playerSegments: { sphere: 8, cylinder: 8 },
         fogDensity: 0.018,
         pixelRatio: 1,
         antialias: false,
-        simpleMaterials: true
+        simpleMaterials: true,
+        roomSegments: 1,
+        maxLights: 4
     },
     ultra: {
         name: 'Ультра',
         shadows: true,
         flashlightShadow: true,
         flashlightShadowMapSize: 1024,
+        flashlightAngle: Math.PI / 7, // Уже конус, более точный
         ceilingLightShadows: true,
         ceilingLightShadowMapSize: 512,
         playerSegments: { sphere: 32, cylinder: 24 },
         fogDensity: 0.012,
         pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
         antialias: true,
-        simpleMaterials: false
+        simpleMaterials: false,
+        roomSegments: 4,
+        maxLights: 12
     }
 };
 
@@ -239,16 +245,22 @@ function initScene() {
     const q = QUALITY_SETTINGS[currentQuality];
     
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xa7d7df);
-    scene.fog = new THREE.Fog(0xa7d7df, 50, 120);
+    // Более темный фон, чтобы фонарик выглядел ярче
+    scene.background = new THREE.Color(0x7a8b92);
+    scene.fog = new THREE.Fog(0x7a8b92, 40, 100);
 
-    camera = new THREE.PerspectiveCamera(76, window.innerWidth / window.innerHeight, 0.05, 180);
+    camera = new THREE.PerspectiveCamera(76, window.innerWidth / window.innerHeight, 0.05, 200);
 
     renderer = new THREE.WebGLRenderer({ antialias: q.antialias });
     renderer.setPixelRatio(q.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = q.shadows;
     renderer.shadowMap.type = q.shadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+    // Отключаем автообновление теней для оптимизации
+    if (q.simpleMaterials) {
+        renderer.shadowMap.autoUpdate = false;
+        renderer.shadowMap.needsUpdate = true;
+    }
     el.canvasWrap.replaceChildren(renderer.domElement);
 
     clock = new THREE.Clock();
@@ -263,31 +275,96 @@ function addWorld() {
     const hemi = new THREE.HemisphereLight(0xbfd8df, 0x35413c, 0.34);
     scene.add(hemi);
 
-    let roomMaterial, groundMaterial, ceilingMaterial;
+    let wallMaterial, floorMaterial, ceilingMaterial, trimMaterial;
     if (q.simpleMaterials) {
-        roomMaterial = new THREE.MeshLambertMaterial({ color: 0x6f7b75 });
-        groundMaterial = new THREE.MeshLambertMaterial({ color: 0x64766b });
+        wallMaterial = new THREE.MeshLambertMaterial({ color: 0x7a8b82 });
+        floorMaterial = new THREE.MeshLambertMaterial({ color: 0x5a6860 });
         ceilingMaterial = new THREE.MeshLambertMaterial({ color: 0x56615d });
+        trimMaterial = new THREE.MeshLambertMaterial({ color: 0x3a4540 });
     } else {
-        roomMaterial = new THREE.MeshStandardMaterial({ color: 0x6f7b75, roughness: 0.86, metalness: 0.02 });
-        groundMaterial = new THREE.MeshStandardMaterial({ color: 0x64766b, roughness: 0.92 });
+        wallMaterial = new THREE.MeshStandardMaterial({ color: 0x7a8b82, roughness: 0.86, metalness: 0.01 });
+        floorMaterial = new THREE.MeshStandardMaterial({ color: 0x5a6860, roughness: 0.92 });
         ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x56615d, roughness: 0.82 });
+        trimMaterial = new THREE.MeshStandardMaterial({ color: 0x3a4540, roughness: 0.85 });
     }
-    
-    const ground = new THREE.Mesh(new THREE.BoxGeometry(120, 1, 120), groundMaterial);
-    ground.position.y = -0.5;
-    ground.receiveShadow = q.shadows;
-    scene.add(ground);
 
+    // 1 этаж (нижний)
+    const floor1 = new THREE.Mesh(new THREE.BoxGeometry(120, 1, 120), floorMaterial);
+    floor1.position.y = -0.5;
+    floor1.receiveShadow = q.shadows;
+    scene.add(floor1);
+
+    // Перекрытие между этажами (делаем из 4 частей, чтобы создать проем)
+    const floorPart1 = new THREE.Mesh(new THREE.BoxGeometry(52, 1, 120), floorMaterial);
+    floorPart1.position.set(-34, 5.5, 0);
+    floorPart1.receiveShadow = q.shadows;
+    scene.add(floorPart1);
+
+    const floorPart2 = new THREE.Mesh(new THREE.BoxGeometry(52, 1, 120), floorMaterial);
+    floorPart2.position.set(34, 5.5, 0);
+    floorPart2.receiveShadow = q.shadows;
+    scene.add(floorPart2);
+
+    const floorPart3 = new THREE.Mesh(new THREE.BoxGeometry(16, 1, 52), floorMaterial);
+    floorPart3.position.set(0, 5.5, -34);
+    floorPart3.receiveShadow = q.shadows;
+    scene.add(floorPart3);
+
+    const floorPart4 = new THREE.Mesh(new THREE.BoxGeometry(16, 1, 52), floorMaterial);
+    floorPart4.position.set(0, 5.5, 34);
+    floorPart4.receiveShadow = q.shadows;
+    scene.add(floorPart4);
+    
+    // Потолок 2 этажа
     const ceiling = new THREE.Mesh(new THREE.BoxGeometry(120, 1, 120), ceilingMaterial);
-    ceiling.position.y = 10.5;
+    ceiling.position.y = 11.5;
     ceiling.receiveShadow = q.shadows;
     scene.add(ceiling);
 
-    addRoomWall(0, 5, -60, 120, 10, 1, roomMaterial);
-    addRoomWall(0, 5, 60, 120, 10, 1, roomMaterial);
-    addRoomWall(-60, 5, 0, 1, 10, 120, roomMaterial);
-    addRoomWall(60, 5, 0, 1, 10, 120, roomMaterial);
+    // Наружные стены
+    addRoomWall(0, 3, -60, 120, 6, 1, wallMaterial); // 1 этаж
+    addRoomWall(0, 9, -60, 120, 6, 1, wallMaterial); // 2 этаж
+    addRoomWall(0, 3, 60, 120, 6, 1, wallMaterial);
+    addRoomWall(0, 9, 60, 120, 6, 1, wallMaterial);
+    addRoomWall(-60, 3, 0, 1, 6, 120, wallMaterial);
+    addRoomWall(-60, 9, 0, 1, 6, 120, wallMaterial);
+    addRoomWall(60, 3, 0, 1, 6, 120, wallMaterial);
+    addRoomWall(60, 9, 0, 1, 6, 120, wallMaterial);
+
+    // Внутренние стены для структуры
+    addRoomWall(0, 3, 0, 100, 6, 0.5, wallMaterial); // Центральная стена на 1 этаже
+    addRoomWall(0, 9, 0, 100, 6, 0.5, wallMaterial); // Центральная стена на 2 этаже
+    addRoomWall(-30, 3, -30, 60, 6, 0.5, wallMaterial);
+    addRoomWall(-30, 9, -30, 60, 6, 0.5, wallMaterial);
+    addRoomWall(30, 3, 30, 60, 6, 0.5, wallMaterial);
+    addRoomWall(30, 9, 30, 60, 6, 0.5, wallMaterial);
+
+    // Дверные проемы (пустые места в стенах)
+    addRoomWall(35, 3, -10, 30, 6, 0.5, wallMaterial); // Часть стены
+    addRoomWall(5, 3, -10, 30, 6, 0.5, wallMaterial); // Другая часть
+
+    // Платформы для прыжков между этажами (маленькие подставки)
+    const platformMat = q.simpleMaterials ? new THREE.MeshLambertMaterial({ color: 0x8b9a92 }) : new THREE.MeshStandardMaterial({ color: 0x8b9a92, roughness: 0.9 });
+    
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 6), platformMat);
+    p1.position.set(-10, 1.75, 0);
+    p1.castShadow = p1.receiveShadow = q.shadows;
+    scene.add(p1);
+
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 6), platformMat);
+    p2.position.set(-10, 3.75, 0);
+    p2.castShadow = p2.receiveShadow = q.shadows;
+    scene.add(p2);
+
+    const p3 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 6), platformMat);
+    p3.position.set(10, 3, 0);
+    p3.castShadow = p3.receiveShadow = q.shadows;
+    scene.add(p3);
+
+    const p4 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, 6), platformMat);
+    p4.position.set(10, 5, 0);
+    p4.castShadow = p4.receiveShadow = q.shadows;
+    scene.add(p4);
 
     const grid = new THREE.GridHelper(118, 59, 0xffffff, 0xffffff);
     grid.position.y = 0.015;
@@ -295,10 +372,17 @@ function addWorld() {
     grid.material.transparent = true;
     scene.add(grid);
 
-    addCeilingLight(-28, 9.7, -28);
-    addCeilingLight(28, 9.7, -28);
-    addCeilingLight(-28, 9.7, 28);
-    addCeilingLight(28, 9.7, 28);
+    // Добавляем лампы на 2 этажа
+    addCeilingLight(-28, 4.7, -28); // 1 этаж
+    addCeilingLight(28, 4.7, -28);
+    addCeilingLight(-28, 4.7, 28);
+    addCeilingLight(28, 4.7, 28);
+    addCeilingLight(-28, 10.7, -28); // 2 этаж
+    addCeilingLight(28, 10.7, -28);
+    addCeilingLight(-28, 10.7, 28);
+    addCeilingLight(28, 10.7, 28);
+    addCeilingLight(0, 4.7, 0); // Центр
+    addCeilingLight(0, 10.7, 0);
 }
 
 function addRoomWall(x, y, z, w, h, d, material) {
@@ -312,21 +396,25 @@ function addRoomWall(x, y, z, w, h, d, material) {
 
 function addCeilingLight(x, y, z) {
     const q = QUALITY_SETTINGS[currentQuality];
-    const light = new THREE.PointLight(0xfff2c7, q.simpleMaterials ? 1.0 : 0.85, 42, 2);
+    const light = new THREE.PointLight(0xfff2c7, q.simpleMaterials ? 1.0 : 0.85, q.simpleMaterials ? 50 : 42, 2);
     light.position.set(x, y, z);
     light.castShadow = q.ceilingLightShadows;
     if (q.ceilingLightShadows) {
         light.shadow.mapSize.set(q.ceilingLightShadowMapSize, q.ceilingLightShadowMapSize);
+        light.shadow.bias = -0.0001; // Уменьшаем артефакты теней
     }
     scene.add(light);
 
-    const bulbSegments = q.simpleMaterials ? 8 : 16;
-    const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.25, bulbSegments, bulbSegments),
-        new THREE.MeshBasicMaterial({ color: 0xfff2c7 })
-    );
-    bulb.position.copy(light.position);
-    scene.add(bulb);
+    // Лампочки - визуально только на Ультра, чтобы не тратить ресурсы на Низких
+    if (!q.simpleMaterials) {
+        const bulbSegments = 12;
+        const bulb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.25, bulbSegments, bulbSegments),
+            new THREE.MeshBasicMaterial({ color: 0xfff2c7 })
+        );
+        bulb.position.copy(light.position);
+        scene.add(bulb);
+    }
 }
 
 function createFlashlight() {
@@ -334,7 +422,8 @@ function createFlashlight() {
     flashlightTarget = new THREE.Object3D();
     scene.add(flashlightTarget);
 
-    flashlight = new THREE.SpotLight(0xfff1bd, 3.8, 36, Math.PI / 7, 0.4, 1.3);
+    const intensity = q.simpleMaterials ? 4.5 : 3.8; // Ярче на низких настройках
+    flashlight = new THREE.SpotLight(0xfff1bd, intensity, 40, q.flashlightAngle, q.simpleMaterials ? 0.5 : 0.4, 1.3);
     flashlight.castShadow = q.flashlightShadow;
     if (q.flashlightShadow) {
         flashlight.shadow.mapSize.set(q.flashlightShadowMapSize, q.flashlightShadowMapSize);
@@ -574,15 +663,67 @@ function getMoveInput() {
 
 function collideArena(player) {
     const p = player.mesh.position;
+    const v = player.velocity;
     p.x = THREE.MathUtils.clamp(p.x, -worldBounds.x, worldBounds.x);
     p.z = THREE.MathUtils.clamp(p.z, -worldBounds.z, worldBounds.z);
 
+    // Определяем, находится ли игрок в области проема между этажами
+    const inHoleX = Math.abs(p.x) < 7; // +/- 7 от центра
+    const inHoleZ = Math.abs(p.z) < 5; // +/- 5 от центра
+    const inHole = inHoleX && inHoleZ;
+
+    let onGround = false;
+
+    // Проверка пола 1 этажа
     if (p.y <= 0) {
         p.y = 0;
-        player.velocity.y = 0;
-        player.onGround = true;
-    } else {
-        player.onGround = false;
+        v.y = 0;
+        onGround = true;
+    } 
+    // Проверка пола 2 этажа (только если не в проеме)
+    else if (p.y <= 6 && p.y > 0 && !inHole) {
+        if (v.y <= 0) { // Падаем на пол 2 этажа
+            p.y = 6;
+            v.y = 0;
+            onGround = true;
+        }
+    } 
+    // Проверка платформ
+    else {
+        const platforms = [
+            { x: -10, y: 1.75, z: 0, w: 8, h: 0.5, d: 6 },
+            { x: -10, y: 3.75, z: 0, w: 8, h: 0.5, d: 6 },
+            { x: 10, y: 3, z: 0, w: 8, h: 0.5, d: 6 },
+            { x: 10, y: 5, z: 0, w: 8, h: 0.5, d: 6 }
+        ];
+        
+        for (let plat of platforms) {
+            // Проверка столкновения с платформой
+            const platTop = plat.y + plat.h / 2;
+            if (Math.abs(p.x - plat.x) < plat.w / 2 &&
+                Math.abs(p.z - plat.z) < plat.d / 2 &&
+                p.y <= platTop + 0.1 && p.y > plat.y && v.y <= 0) {
+                p.y = platTop;
+                v.y = 0;
+                onGround = true;
+                break;
+            }
+        }
+    }
+    
+    // Проверка потолка
+    if (p.y >= 11) {
+        p.y = 11;
+        v.y = 0;
+        onGround = true;
+    }
+
+    player.onGround = onGround;
+
+    // Ограничение максимальной высоты прыжка
+    if (p.y > 12) {
+        p.y = 12;
+        v.y = -2;
     }
 }
 
