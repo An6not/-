@@ -992,21 +992,27 @@ function setQuality(quality) {
 }
 
 function autoSetQuality() {
-    // Оценка производительности и выбор качества
+    // Улучшенная оценка производительности
     if (isMobileDevice()) {
         setQuality('low');
-    } else if (navigator.hardwareConcurrency && navigator.hardwareConcurrency > 6) {
-        setQuality('ultra');
-    } else if (navigator.hardwareConcurrency && navigator.hardwareConcurrency > 3) {
-        setQuality('med');
     } else {
-        setQuality('low');
+        // Определяем по количеству ядер и устройству
+        const cores = navigator.hardwareConcurrency || 4;
+        if (cores >= 8) {
+            setQuality('ultra');
+        } else if (cores >= 5) {
+            setQuality('med');
+        } else {
+            setQuality('low');
+        }
     }
     
-    el.autoQualityBtn.textContent = 'Авто-настройка применена!';
-    setTimeout(() => {
-        el.autoQualityBtn.textContent = 'Авто-настройка (60 FPS)';
-    }, 2000);
+    if (el.autoQualityBtn) {
+        el.autoQualityBtn.textContent = 'Авто-настройка применена!';
+        setTimeout(() => {
+            el.autoQualityBtn.textContent = 'Авто-настройка (60 FPS)';
+        }, 2000);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
