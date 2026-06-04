@@ -39,6 +39,7 @@ let flashlight;
 let flashlightTarget;
 let flashlightPosition = new THREE.Vector3();
 let flashlightDirection = new THREE.Vector3(0, 0, -1);
+let flashlightFlicker = 0;
 let worldBounds = { x: 58, z: 58 };
 
 const el = {
@@ -282,9 +283,9 @@ function createFlashlight() {
     flashlightTarget = new THREE.Object3D();
     scene.add(flashlightTarget);
 
-    flashlight = new THREE.SpotLight(0xfff1bd, 3.8, 36, Math.PI / 7.5, 0.45, 1.2);
+    flashlight = new THREE.SpotLight(0xfff1bd, 3.8, 36, Math.PI / 7, 0.4, 1.3);
     flashlight.castShadow = true;
-    flashlight.shadow.mapSize.set(1024, 1024);
+    flashlight.shadow.mapSize.set(512, 512); // Оптимизация: меньше карта теней
     flashlight.target = flashlightTarget;
     scene.add(flashlight);
 }
@@ -547,18 +548,32 @@ function updateFlashlight(dt) {
     const desiredDirection = new THREE.Vector3();
     camera.getWorldDirection(desiredDirection);
 
+    const moving = Math.hypot(localPlayer.velocity.x, localPlayer.velocity.z);
+    const bobPower = localPlayer.onGround ? THREE.MathUtils.clamp(moving / localPlayer.sprintSpeed, 0, 1) : 0;
+    const bobY = Math.sin(state.walkTime * 7) * 0.022 * bobPower;
+    const bobX = Math.sin(state.walkTime * 3.5) * 0.012 * bobPower;
+
     const desiredPosition = camera.position.clone()
         .add(new THREE.Vector3(0, -0.18, 0))
-        .addScaledVector(desiredDirection, 0.18);
+        .addScaledVector(desiredDirection, 0.18)
+        .add(new THREE.Vector3(bobX, bobY, 0));
 
-    const posAlpha = 1 - Math.pow(0.001, dt);
-    const dirAlpha = 1 - Math.pow(0.01, dt);
+    const posAlpha = 1 - Math.pow(0.0003, dt); // Более быстрая интерполяция позиции
+    const dirAlpha = 1 - Math.pow(0.0015, dt); // Более быстрая интерполяция направления
     flashlightPosition.lerp(desiredPosition, posAlpha);
     flashlightDirection.lerp(desiredDirection, dirAlpha).normalize();
 
+    // Мерцание фонарика
+    flashlightFlicker += dt * 12;
+    const flickerAmount = (Math.sin(flashlightFlicker) * 0.5 + Math.sin(flashlightFlicker * 1.7) * 0.3 + Math.sin(flashlightFlicker * 0.9) * 0.2) * 0.08;
+    
     flashlight.position.copy(flashlightPosition);
     flashlightTarget.position.copy(flashlightPosition).addScaledVector(flashlightDirection, 20);
-    flashlight.intensity = state.flashlightOn ? 3.8 : 0;
+    const baseIntensity = 3.8;
+    flashlight.intensity = state.flashlightOn ? (baseIntensity + baseIntensity * flickerAmount) : 0;
+    
+    // Небольшое покачивание конуса фонарика
+    flashlight.penumbra = 0.4 + Math.sin(flashlightFlicker * 2.1) * 0.02;
 }
 
 function updateRemotePlayer(now) {
