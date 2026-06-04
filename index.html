@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Multiplayer Platform Game</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div id="mainMenu">
+        <h1>🎮 Платформер</h1>
+        <button id="createRoomBtn">Создать комнату</button>
+        <button id="joinRoomBtn">Присоединиться к комнате</button>
+        <div id="joinRoomSection" style="display: none;">
+            <input type="text" id="roomCodeInput" placeholder="Введите код комнаты (5 цифр)" maxlength="5">
+            <button id="joinBtn">Подключиться</button>
+        </div>
+        <div id="roomCodeDisplay" style="display: none;">
+            <p>Код вашей комнаты: <strong id="roomCode"></strong></p>
+            <p>Ожидание игрока...</p>
+        </div>
+    </div>
+
+    <div id="gameContainer" style="display: none;">
+        <canvas id="gameCanvas"></canvas>
+        <div id="mobileControls">
+            <button id="leftBtn">←</button>
+            <button id="jumpBtn">↑</button>
+            <button id="rightBtn">→</button>
+        </div>
+        <div id="gameInfo">
+            <span id="playerInfo">Игрок 1</span>
+            <button id="leaveBtn">Выйти</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
