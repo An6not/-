@@ -1,550 +1,680 @@
-// Game State
-let peer = null;
-let conn = null;
-let isHost = false;
-let roomCode = null;
-let gameRunning = false;
-let connectionRetries = 0;
-let maxRetries = 3;
+const PEER_PREFIX = 'fffaa-';
+const SNAPSHOT_RATE_MS = 33;
+const INTERPOLATION_DELAY_MS = 120;
 
-// Three.js
-let scene, camera, renderer;
-let localPlayerMesh, remotePlayerMesh;
-let platforms = [];
-
-// Controls
-let joystick = null;
-let joystickData = { x: 0, y: 0 };
-let keys = {
-    left: false,
-    right: false,
-    jump: false
+const state = {
+    mode: 'solo',
+    peer: null,
+    conn: null,
+    roomCode: null,
+    running: false,
+    pointerLocked: false,
+    lastNetSend: 0,
+    sequence: 0,
+    yaw: 0,
+    pitch: 0,
+    lookTouchId: null,
+    lastLookTouch: null,
+    keys: {
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        jump: false,
+        sprint: false
+    },
+    stick: { x: 0, y: 0 }
 };
 
-// Room Code Functions
+let scene;
+let camera;
+let renderer;
+let clock;
+let localPlayer;
+let remotePlayer;
+let joystick;
+let worldBounds = { x: 44, z: 44 };
+
+const el = {
+    menu: document.getElementById('mainMenu'),
+    soloBtn: document.getElementById('soloBtn'),
+    createRoomBtn: document.getElementById('createRoomBtn'),
+    joinRoomBtn: document.getElementById('joinRoomBtn'),
+    joinRoomSection: document.getElementById('joinRoomSection'),
+    roomCodeInput: document.getElementById('roomCodeInput'),
+    joinBtn: document.getElementById('joinBtn'),
+    roomCodeDisplay: document.getElementById('roomCodeDisplay'),
+    roomCode: document.getElementById('roomCode'),
+    connectionStatus: document.getElementById('connectionStatus'),
+    gameContainer: document.getElementById('gameContainer'),
+    canvasWrap: document.getElementById('gameCanvas'),
+    playerInfo: document.getElementById('playerInfo'),
+    netInfo: document.getElementById('netInfo'),
+    leaveBtn: document.getElementById('leaveBtn'),
+    joystickZone: document.getElementById('joystickZone'),
+    jumpBtn: document.getElementById('jumpBtn'),
+    fullscreenBtn: document.getElementById('fullscreenBtn')
+};
+
 function generateRoomCode() {
-    return Math.floor(10000 + Math.random() * 90000).toString();
+    return String(Math.floor(10000 + Math.random() * 90000));
 }
 
-function validateRoomCode(code) {
+function isValidCode(code) {
     return /^\d{5}$/.test(code);
 }
 
-// PeerJS Setup with improved error handling
-function initPeer(customId = null) {
-    connectionRetries = 0;
-    
-    // Try multiple PeerJS server configurations
-    const serverConfigs = [
-        {
-            host: '0.peerjs.com',
-            port: 443,
-            path: '/',
-            secure: true
-        },
-        {
-            host: 'peerjs.server.herokuapp.com',
-            port: 443,
-            path: '/',
-            secure: true
-        }
-    ];
-    
-    const peerOptions = {
-        debug: 2,
+function setStatus(text) {
+    el.connectionStatus.textContent = text;
+}
+
+function setNetInfo(text) {
+    el.netInfo.textContent = text;
+}
+
+function showJoinPanel() {
+    el.joinRoomSection.classList.toggle('hidden');
+    el.roomCodeDisplay.classList.add('hidden');
+    el.roomCodeInput.focus();
+}
+
+function createPeer(id) {
+    return new Peer(id, {
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true,
+        debug: 1,
         config: {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:global.stun.twilio.com:3478' }
+                { urls: 'stun:stun1.l.google.com:19302' }
             ]
         }
-    };
-    
-    // Add server config
-    Object.assign(peerOptions, serverConfigs[0]);
-    
-    if (customId) {
-        peerOptions.id = customId;
-    }
-    
-    console.log('Attempting to connect with config:', peerOptions);
-    
-    try {
-        peer = new Peer(peerOptions);
-    } catch (e) {
-        console.error('Peer creation error:', e);
-        alert('Ошибка создания P2P соединения. Попробуйте другой браузер.');
+    });
+}
+
+function hostRoom() {
+    destroyNetwork();
+    state.mode = 'host';
+    state.roomCode = generateRoomCode();
+    el.roomCode.textContent = state.roomCode;
+    el.roomCodeDisplay.classList.remove('hidden');
+    el.joinRoomSection.classList.add('hidden');
+    setStatus('Создаём P2P-комнату...');
+
+    state.peer = createPeer(PEER_PREFIX + state.roomCode);
+    state.peer.on('open', () => setStatus('Ожидание второго игрока...'));
+    state.peer.on('connection', (connection) => {
+        if (state.conn) {
+            connection.close();
+            return;
+        }
+        setupConnection(connection);
+        setStatus('Игрок подключился. Запускаем...');
+        startGame('host');
+    });
+    state.peer.on('error', (error) => {
+        setStatus(error.type === 'unavailable-id' ? 'Код занят. Создайте комнату ещё раз.' : 'Ошибка P2P: ' + error.type);
+        console.error(error);
+    });
+}
+
+function joinRoom() {
+    const code = el.roomCodeInput.value.trim();
+    if (!isValidCode(code)) {
+        el.roomCode.textContent = '-----';
+        el.roomCodeDisplay.classList.remove('hidden');
+        setStatus('Введите ровно 5 цифр.');
         return;
     }
-    
-    peer.on('open', (id) => {
-        console.log('Connected with ID:', id);
-        if (isHost) {
-            roomCode = generateRoomCode();
-            document.getElementById('roomCode').textContent = roomCode;
-            document.getElementById('roomCodeDisplay').style.display = 'block';
-            document.getElementById('roomCodeDisplay').innerHTML = `
-                <p>Код вашей комнаты: <strong id="roomCode">${roomCode}</strong></p>
-                <p>Ожидание игрока...</p>
-                <p style="font-size: 12px; color: #666;">ID: ${id}</p>
-            `;
-        }
-    });
-    
-    // Add connection timeout
-    setTimeout(() => {
-        if (peer && !peer.id) {
-            console.log('Connection timeout, retrying...');
-            if (connectionRetries < maxRetries) {
-                connectionRetries++;
-                peer.destroy();
-                initPeer(customId);
-            } else {
-                alert('Не удалось подключиться к серверу PeerJS. Проверьте интернет-соединение или попробуйте позже.');
-            }
-        }
-    }, 10000);
-    
-    peer.on('connection', (connection) => {
-        if (isHost && !conn) {
-            conn = connection;
-            setupConnection(conn);
-            startGame();
-        }
-    });
-    
-    peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        if (err.type === 'unavailable-id' && connectionRetries < maxRetries) {
-            connectionRetries++;
-            const newId = 'game-' + generateRoomCode() + '-' + Date.now();
-            initPeer(newId);
-        } else if (err.type === 'peer-unavailable') {
-            alert('Игрок не найден. Проверьте код комнаты.');
-        } else if (err.type === 'server-error' || err.type === 'network') {
-            alert('Ошибка соединения с сервером PeerJS.\n\nВозможные причины:\n1. Сервер PeerJS временно недоступен\n2. Брандмауэр блокирует соединение\n3. Проблемы с интернетом\n\nПопробуйте снова через несколько минут.');
-        } else if (err.type === 'disconnected') {
-            alert('Соединение с сервером потеряно. Проверьте интернет.');
-        } else if (err.type === 'ssl-unavailable') {
-            alert('SSL недоступен. Попробуйте использовать HTTPS.');
-        } else {
-            alert('Ошибка соединения (' + err.type + '): ' + err.message);
-        }
+
+    destroyNetwork();
+    state.mode = 'client';
+    state.roomCode = code;
+    el.roomCode.textContent = code;
+    el.roomCodeDisplay.classList.remove('hidden');
+    setStatus('Подключаемся к комнате...');
+
+    state.peer = createPeer();
+    state.peer.on('open', () => setupConnection(state.peer.connect(PEER_PREFIX + code, { reliable: true })));
+    state.peer.on('error', (error) => {
+        setStatus(error.type === 'peer-unavailable' ? 'Комната не найдена.' : 'Ошибка P2P: ' + error.type);
+        console.error(error);
     });
 }
 
 function setupConnection(connection) {
-    conn = connection;
-    
-    conn.on('open', () => {
-        console.log('Connection established');
-        if (!isHost) {
-            startGame();
-        }
+    state.conn = connection;
+    connection.on('open', () => {
+        setNetInfo('p2p online');
+        if (state.mode === 'client') startGame('client');
+        sendNetwork({ type: 'hello', role: state.mode, version: 2 });
     });
-    
-    conn.on('data', (data) => {
-        handleGameData(data);
+    connection.on('data', handleNetworkMessage);
+    connection.on('close', () => {
+        setNetInfo('p2p closed');
+        if (remotePlayer) remotePlayer.visible = false;
     });
-    
-    conn.on('close', () => {
-        console.log('Connection closed');
-        if (gameRunning) {
-            alert('Соединение разорвано');
-            endGame();
-        }
-    });
-    
-    conn.on('error', (err) => {
-        console.error('Connection error:', err);
-    });
+    connection.on('error', console.error);
 }
 
-function connectToPeer(peerId) {
-    const connection = peer.connect(peerId, {
-        reliable: true
-    });
-    setupConnection(connection);
+function handleNetworkMessage(message) {
+    if (!message || message.type !== 'snapshot' || !remotePlayer) return;
+
+    const sample = {
+        time: performance.now(),
+        sequence: message.sequence || 0,
+        position: new THREE.Vector3(message.x, message.y, message.z),
+        velocity: new THREE.Vector3(message.vx, message.vy, message.vz),
+        yaw: message.yaw || 0,
+        pitch: message.pitch || 0
+    };
+
+    const last = remotePlayer.buffer[remotePlayer.buffer.length - 1];
+    if (last && sample.sequence <= last.sequence) return;
+
+    remotePlayer.buffer.push(sample);
+    if (remotePlayer.buffer.length > 20) remotePlayer.buffer.shift();
+    remotePlayer.visible = true;
 }
 
-// Game Data Handling
-function handleGameData(data) {
-    if (data.type === 'playerUpdate' && remotePlayerMesh) {
-        remotePlayerMesh.position.x = data.x;
-        remotePlayerMesh.position.y = data.y;
-        remotePlayerMesh.userData.vx = data.vx;
-        remotePlayerMesh.userData.vy = data.vy;
+function sendNetwork(message) {
+    if (state.conn && state.conn.open) state.conn.send(message);
+}
+
+function destroyNetwork() {
+    if (state.conn) {
+        state.conn.close();
+        state.conn = null;
+    }
+    if (state.peer) {
+        state.peer.destroy();
+        state.peer = null;
     }
 }
 
-function sendPlayerUpdate() {
-    if (conn && conn.open && localPlayerMesh) {
-        conn.send({
-            type: 'playerUpdate',
-            x: localPlayerMesh.position.x,
-            y: localPlayerMesh.position.y,
-            vx: localPlayerMesh.userData.vx,
-            vy: localPlayerMesh.userData.vy
+function initScene() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xa7d7df);
+    scene.fog = new THREE.Fog(0xa7d7df, 55, 115);
+
+    camera = new THREE.PerspectiveCamera(76, window.innerWidth / window.innerHeight, 0.05, 180);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    el.canvasWrap.replaceChildren(renderer.domElement);
+
+    clock = new THREE.Clock();
+    addWorld();
+    makePlayers();
+    window.addEventListener('resize', resizeRenderer);
+}
+
+function addWorld() {
+    const hemi = new THREE.HemisphereLight(0xf4feff, 0x4f6a5f, 1.05);
+    scene.add(hemi);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(18, 24, 10);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -45;
+    sun.shadow.camera.right = 45;
+    sun.shadow.camera.top = 45;
+    sun.shadow.camera.bottom = -45;
+    scene.add(sun);
+
+    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x6cb879, roughness: 0.88 });
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(92, 1, 92), groundMaterial);
+    ground.position.y = -0.5;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const grid = new THREE.GridHelper(92, 46, 0xffffff, 0xffffff);
+    grid.position.y = 0.015;
+    grid.material.opacity = 0.2;
+    grid.material.transparent = true;
+    scene.add(grid);
+
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x536f68, roughness: 0.8 });
+    addWall(0, 1.4, -46, 92, 2.8, 1, wallMaterial);
+    addWall(0, 1.4, 46, 92, 2.8, 1, wallMaterial);
+    addWall(-46, 1.4, 0, 1, 2.8, 92, wallMaterial);
+    addWall(46, 1.4, 0, 1, 2.8, 92, wallMaterial);
+
+    const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x7f7a61, roughness: 0.84 });
+    addBox(-16, 0.55, -10, 8, 1.1, 5, obstacleMaterial);
+    addBox(18, 0.55, 11, 10, 1.1, 6, obstacleMaterial);
+    addBox(4, 0.35, -22, 12, 0.7, 4, obstacleMaterial);
+}
+
+function addWall(x, y, z, w, h, d, material) {
+    addBox(x, y, z, w, h, d, material);
+}
+
+function addBox(x, y, z, w, h, d, material) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+}
+
+function makePlayers() {
+    const localColor = state.mode === 'client' ? 0x2f8f83 : 0xd95c54;
+    const remoteColor = state.mode === 'client' ? 0xd95c54 : 0x2f8f83;
+    localPlayer = createPlayer(localColor, state.mode === 'client' ? 4 : -4, 0);
+    localPlayer.mesh.visible = false;
+
+    remotePlayer = createPlayer(remoteColor, state.mode === 'client' ? -4 : 4, 0);
+    remotePlayer.visible = state.mode !== 'solo';
+    remotePlayer.mesh.visible = remotePlayer.visible;
+    remotePlayer.buffer = [];
+
+    state.yaw = state.mode === 'client' ? Math.PI : 0;
+    state.pitch = 0;
+}
+
+function createPlayer(color, x, z) {
+    const group = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.55 });
+
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 1.25, 18), material);
+    body.position.y = 0.78;
+    body.castShadow = true;
+    group.add(body);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 14), material);
+    head.position.y = 1.58;
+    head.castShadow = true;
+    group.add(head);
+
+    const face = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.08, 0.04),
+        new THREE.MeshStandardMaterial({ color: 0x111820, roughness: 0.5 })
+    );
+    face.position.set(0, 1.62, -0.39);
+    group.add(face);
+
+    group.position.set(x, 0, z);
+    scene.add(group);
+
+    return {
+        mesh: group,
+        velocity: new THREE.Vector3(),
+        radius: 0.42,
+        eyeHeight: 1.62,
+        speed: 8.5,
+        sprintSpeed: 12,
+        jump: 7.5,
+        onGround: true,
+        visible: true,
+        buffer: []
+    };
+}
+
+function startGame(mode) {
+    state.mode = mode;
+    state.running = true;
+    state.lastNetSend = 0;
+    state.sequence = 0;
+    resetInput();
+
+    el.menu.classList.add('hidden');
+    el.gameContainer.classList.remove('hidden');
+    el.playerInfo.textContent = mode === 'host' ? 'Игрок 1: хост' : mode === 'client' ? 'Игрок 2' : 'Одиночная игра';
+    setNetInfo(mode === 'solo' ? 'offline' : 'p2p wait');
+
+    initScene();
+    initControls();
+    requestAnimationFrame(loop);
+}
+
+function endGame() {
+    state.running = false;
+    destroyNetwork();
+    exitPointerLock();
+
+    if (joystick) {
+        joystick.destroy();
+        joystick = null;
+    }
+    if (renderer) {
+        renderer.dispose();
+        renderer.domElement.remove();
+        renderer = null;
+    }
+
+    window.removeEventListener('resize', resizeRenderer);
+    scene = null;
+    camera = null;
+    clock = null;
+    localPlayer = null;
+    remotePlayer = null;
+    resetInput();
+
+    el.gameContainer.classList.add('hidden');
+    el.menu.classList.remove('hidden');
+    setNetInfo('offline');
+}
+
+function resetInput() {
+    state.keys.forward = false;
+    state.keys.backward = false;
+    state.keys.left = false;
+    state.keys.right = false;
+    state.keys.jump = false;
+    state.keys.sprint = false;
+    state.stick.x = 0;
+    state.stick.y = 0;
+    state.lookTouchId = null;
+    state.lastLookTouch = null;
+}
+
+function initControls() {
+    if (!joystick && window.nipplejs) {
+        joystick = nipplejs.create({
+            zone: el.joystickZone,
+            mode: 'static',
+            position: { left: '50%', top: '50%' },
+            color: '#ffffff',
+            size: 118,
+            multitouch: true,
+            maxNumberOfNipples: 1
+        });
+
+        joystick.on('move', (_, data) => {
+            if (!data.vector) return;
+            state.stick.x = data.vector.x;
+            state.stick.y = data.vector.y;
+        });
+        joystick.on('end', () => {
+            state.stick.x = 0;
+            state.stick.y = 0;
         });
     }
 }
 
-// Three.js Setup
-function initThreeJS() {
-    const container = document.getElementById('gameCanvas');
-    
-    // Scene
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB);
-    
-    // Camera
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 5, 20);
-    camera.lookAt(0, 0, 0);
-    
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    container.appendChild(renderer.domElement);
-    
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-    
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 20, 10);
-    directionalLight.castShadow = true;
-    scene.add(directionalLight);
-    
-    // Create platforms
-    createPlatforms();
-    
-    // Create players
-    createPlayers();
-    
-    // Handle resize
-    window.addEventListener('resize', onWindowResize);
+function updateLocalPlayer(dt) {
+    const move = getMoveInput();
+    const speed = state.keys.sprint ? localPlayer.sprintSpeed : localPlayer.speed;
+    const sin = Math.sin(state.yaw);
+    const cos = Math.cos(state.yaw);
+
+    const worldX = move.x * cos - move.z * sin;
+    const worldZ = move.x * sin + move.z * cos;
+
+    localPlayer.velocity.x = worldX * speed;
+    localPlayer.velocity.z = worldZ * speed;
+    localPlayer.velocity.y -= 22 * dt;
+
+    if (state.keys.jump && localPlayer.onGround) {
+        localPlayer.velocity.y = localPlayer.jump;
+        localPlayer.onGround = false;
+    }
+
+    localPlayer.mesh.position.x += localPlayer.velocity.x * dt;
+    localPlayer.mesh.position.y += localPlayer.velocity.y * dt;
+    localPlayer.mesh.position.z += localPlayer.velocity.z * dt;
+
+    collideArena(localPlayer);
+    localPlayer.mesh.rotation.y = state.yaw;
 }
 
-function createPlatforms() {
-    // Ground
-    const groundGeometry = new THREE.BoxGeometry(30, 1, 10);
-    const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.position.set(0, -5, 0);
-    ground.receiveShadow = true;
-    ground.userData = { isPlatform: true, width: 30, height: 1 };
-    scene.add(ground);
-    platforms.push(ground);
-    
-    // Floating platforms
-    const platformPositions = [
-        { x: -8, y: 0, z: 0, w: 6, h: 0.5 },
-        { x: 8, y: 2, z: 0, w: 6, h: 0.5 },
-        { x: 0, y: 4, z: 0, w: 8, h: 0.5 },
-        { x: -10, y: 7, z: 0, w: 5, h: 0.5 },
-        { x: 10, y: 7, z: 0, w: 5, h: 0.5 }
-    ];
-    
-    platformPositions.forEach(pos => {
-        const geometry = new THREE.BoxGeometry(pos.w, pos.h, 4);
-        const material = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-        const platform = new THREE.Mesh(geometry, material);
-        platform.position.set(pos.x, pos.y, pos.z);
-        platform.receiveShadow = true;
-        platform.castShadow = true;
-        platform.userData = { isPlatform: true, width: pos.w, height: pos.h };
-        scene.add(platform);
-        platforms.push(platform);
+function getMoveInput() {
+    let x = 0;
+    let z = 0;
+
+    if (state.keys.left) x -= 1;
+    if (state.keys.right) x += 1;
+    if (state.keys.forward) z -= 1;
+    if (state.keys.backward) z += 1;
+
+    if (Math.abs(state.stick.x) > 0.04 || Math.abs(state.stick.y) > 0.04) {
+        x += state.stick.x;
+        z -= state.stick.y;
+    }
+
+    const length = Math.hypot(x, z);
+    if (length > 1) {
+        x /= length;
+        z /= length;
+    }
+    return { x, z };
+}
+
+function collideArena(player) {
+    const p = player.mesh.position;
+    p.x = THREE.MathUtils.clamp(p.x, -worldBounds.x, worldBounds.x);
+    p.z = THREE.MathUtils.clamp(p.z, -worldBounds.z, worldBounds.z);
+
+    if (p.y <= 0) {
+        p.y = 0;
+        player.velocity.y = 0;
+        player.onGround = true;
+    } else {
+        player.onGround = false;
+    }
+}
+
+function updateCamera() {
+    const p = localPlayer.mesh.position;
+    camera.position.set(p.x, p.y + localPlayer.eyeHeight, p.z);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = state.yaw;
+    camera.rotation.x = state.pitch;
+}
+
+function updateRemotePlayer(now) {
+    if (!remotePlayer || !remotePlayer.visible) return;
+    remotePlayer.mesh.visible = true;
+
+    const buffer = remotePlayer.buffer;
+    if (buffer.length === 0) return;
+
+    const renderTime = now - INTERPOLATION_DELAY_MS;
+    while (buffer.length >= 2 && buffer[1].time <= renderTime) buffer.shift();
+
+    let targetPosition;
+    let targetYaw;
+
+    if (buffer.length >= 2 && buffer[0].time <= renderTime && buffer[1].time >= renderTime) {
+        const a = buffer[0];
+        const b = buffer[1];
+        const t = THREE.MathUtils.clamp((renderTime - a.time) / (b.time - a.time || 1), 0, 1);
+        targetPosition = a.position.clone().lerp(b.position, smoothstep(t));
+        targetYaw = lerpAngle(a.yaw, b.yaw, t);
+    } else {
+        const latest = buffer[buffer.length - 1];
+        const dt = Math.min((renderTime - latest.time) / 1000, 0.12);
+        targetPosition = latest.position.clone().addScaledVector(latest.velocity, Math.max(0, dt));
+        targetYaw = latest.yaw;
+    }
+
+    remotePlayer.mesh.position.lerp(targetPosition, 0.42);
+    remotePlayer.mesh.rotation.y = lerpAngle(remotePlayer.mesh.rotation.y, targetYaw, 0.35);
+}
+
+function smoothstep(t) {
+    return t * t * (3 - 2 * t);
+}
+
+function lerpAngle(a, b, t) {
+    const delta = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+    return a + delta * t;
+}
+
+function sendPlayerSnapshot(now) {
+    if (state.mode === 'solo' || now - state.lastNetSend < SNAPSHOT_RATE_MS) return;
+    state.lastNetSend = now;
+    state.sequence += 1;
+    sendNetwork({
+        type: 'snapshot',
+        sequence: state.sequence,
+        x: localPlayer.mesh.position.x,
+        y: localPlayer.mesh.position.y,
+        z: localPlayer.mesh.position.z,
+        vx: localPlayer.velocity.x,
+        vy: localPlayer.velocity.y,
+        vz: localPlayer.velocity.z,
+        yaw: state.yaw,
+        pitch: state.pitch
     });
 }
 
-function createPlayers() {
-    // Player geometry
-    const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
-    
-    // Local player
-    const localMaterial = new THREE.MeshLambertMaterial({ color: isHost ? 0xFF6B6B : 0x4ECDC4 });
-    localPlayerMesh = new THREE.Mesh(playerGeometry, localMaterial);
-    localPlayerMesh.position.set(isHost ? -10 : 10, 0, 0);
-    localPlayerMesh.castShadow = true;
-    localPlayerMesh.userData = {
-        vx: 0,
-        vy: 0,
-        speed: 0.15,
-        jumpForce: 0.35,
-        gravity: 0.015,
-        grounded: false,
-        width: 1,
-        height: 2
-    };
-    scene.add(localPlayerMesh);
-    
-    // Remote player
-    const remoteMaterial = new THREE.MeshLambertMaterial({ color: isHost ? 0x4ECDC4 : 0xFF6B6B });
-    remotePlayerMesh = new THREE.Mesh(playerGeometry, remoteMaterial);
-    remotePlayerMesh.position.set(isHost ? 10 : -10, 0, 0);
-    remotePlayerMesh.castShadow = true;
-    remotePlayerMesh.userData = {
-        vx: 0,
-        vy: 0,
-        width: 1,
-        height: 2
-    };
-    scene.add(remotePlayerMesh);
+function loop(now) {
+    if (!state.running) return;
+    const dt = Math.min(clock.getDelta(), 0.033);
+
+    updateLocalPlayer(dt);
+    updateCamera();
+    updateRemotePlayer(now);
+    sendPlayerSnapshot(now);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
 }
 
-function onWindowResize() {
+function resizeRenderer() {
+    if (!renderer || !camera) return;
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Player physics
-function updatePlayer(player) {
-    const data = player.userData;
-    
-    // Apply gravity
-    data.vy -= data.gravity;
-    
-    // Apply velocity
-    player.position.x += data.vx;
-    player.position.y += data.vy;
-    
-    // Platform collision
-    data.grounded = false;
-    
-    for (const platform of platforms) {
-        const pData = platform.userData;
-        const pX = platform.position.x;
-        const pY = platform.position.y;
-        
-        // Check collision
-        if (player.position.x > pX - pData.width/2 - data.width/2 &&
-            player.position.x < pX + pData.width/2 + data.width/2 &&
-            player.position.y - data.height/2 > pY - pData.height/2 &&
-            player.position.y - data.height/2 < pY + pData.height/2 + data.vy + 0.1 &&
-            data.vy <= 0) {
-            
-            player.position.y = pY + pData.height/2 + data.height/2;
-            data.vy = 0;
-            data.grounded = true;
-        }
-    }
-    
-    // Boundary collision
-    if (player.position.x < -15) player.position.x = -15;
-    if (player.position.x > 15) player.position.x = 15;
-    if (player.position.y < -5) {
-        player.position.y = -5;
-        data.vy = 0;
-        data.grounded = true;
-    }
-    
-    // Friction
-    data.vx *= 0.85;
-}
-
-function movePlayer(direction) {
-    if (localPlayerMesh) {
-        if (direction === 'left') {
-            localPlayerMesh.userData.vx = -localPlayerMesh.userData.speed;
-        } else if (direction === 'right') {
-            localPlayerMesh.userData.vx = localPlayerMesh.userData.speed;
-        }
-    }
-}
-
-function jumpPlayer() {
-    if (localPlayerMesh && localPlayerMesh.userData.grounded) {
-        localPlayerMesh.userData.vy = localPlayerMesh.userData.jumpForce;
-        localPlayerMesh.userData.grounded = false;
-    }
-}
-
-// Game Loop
-function gameLoop() {
-    if (!gameRunning) return;
-    
-    // Update local player
-    if (localPlayerMesh) {
-        // Keyboard controls
-        if (keys.left) movePlayer('left');
-        if (keys.right) movePlayer('right');
-        if (keys.jump) jumpPlayer();
-        
-        // Joystick controls
-        if (joystickData.x !== 0) {
-            localPlayerMesh.userData.vx = joystickData.x * localPlayerMesh.userData.speed;
-        }
-        
-        updatePlayer(localPlayerMesh);
-        
-        // Send update to peer
-        sendPlayerUpdate();
-    }
-    
-    // Update camera to follow local player
-    if (localPlayerMesh) {
-        camera.position.x = localPlayerMesh.position.x * 0.3;
-        camera.lookAt(localPlayerMesh.position.x * 0.3, 0, 0);
-    }
-    
-    renderer.render(scene, camera);
-    requestAnimationFrame(gameLoop);
-}
-
-// Initialize Joystick
-function initJoystick() {
-    const zone = document.getElementById('joystickZone');
-    
-    joystick = nipplejs.create({
-        zone: zone,
-        mode: 'static',
-        position: { left: '50%', top: '50%' },
-        color: 'rgba(255, 255, 255, 0.8)',
-        size: 120
-    });
-    
-    joystick.on('move', (evt, data) => {
-        if (data.vector) {
-            joystickData.x = data.vector.x;
-            joystickData.y = data.vector.y;
-        }
-    });
-    
-    joystick.on('end', () => {
-        joystickData.x = 0;
-        joystickData.y = 0;
-    });
-}
-
-// Fullscreen
 function toggleFullscreen() {
     if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-            console.log('Fullscreen error:', err);
-        });
+        document.documentElement.requestFullscreen().catch(console.warn);
     } else {
-        document.exitFullscreen();
+        document.exitFullscreen().catch(console.warn);
     }
 }
 
-// Start Game
-function startGame() {
-    document.getElementById('mainMenu').style.display = 'none';
-    document.getElementById('gameContainer').style.display = 'block';
-    
-    initThreeJS();
-    initJoystick();
-    gameRunning = true;
-    
-    document.getElementById('playerInfo').textContent = isHost ? 'Игрок 1 (Хост)' : 'Игрок 2';
-    
-    gameLoop();
+function requestPointerLock() {
+    if (!state.running || isTouchDevice()) return;
+    renderer.domElement.requestPointerLock?.();
 }
 
-// End Game
-function endGame() {
-    gameRunning = false;
-    
-    if (conn) {
-        conn.close();
-        conn = null;
-    }
-    
-    if (peer) {
-        peer.destroy();
-        peer = null;
-    }
-    
-    if (joystick) {
-        joystick.destroy();
-        joystick = null;
-    }
-    
-    if (renderer) {
-        renderer.dispose();
-        renderer = null;
-    }
-    
-    document.getElementById('gameContainer').style.display = 'none';
-    document.getElementById('mainMenu').style.display = 'block';
-    document.getElementById('roomCodeDisplay').style.display = 'none';
-    document.getElementById('joinRoomSection').style.display = 'none';
-    
-    // Clear scene
-    while(scene && scene.children.length > 0) {
-        scene.remove(scene.children[0]);
-    }
-    
-    isHost = false;
-    roomCode = null;
-    localPlayerMesh = null;
-    remotePlayerMesh = null;
-    platforms = [];
+function exitPointerLock() {
+    if (document.pointerLockElement) document.exitPointerLock();
 }
 
-// Event Listeners
-document.getElementById('createRoomBtn').addEventListener('click', () => {
-    isHost = true;
-    initPeer();
-});
+function isTouchDevice() {
+    return navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches;
+}
 
-document.getElementById('joinRoomBtn').addEventListener('click', () => {
-    document.getElementById('joinRoomSection').style.display = 'block';
-});
+function lookBy(deltaX, deltaY, multiplier = 1) {
+    state.yaw -= deltaX * 0.0026 * multiplier;
+    state.pitch -= deltaY * 0.0022 * multiplier;
+    state.pitch = THREE.MathUtils.clamp(state.pitch, -1.35, 1.35);
+}
 
-document.getElementById('joinBtn').addEventListener('click', () => {
-    const code = document.getElementById('roomCodeInput').value;
-    
-    if (!validateRoomCode(code)) {
-        alert('Введите 5-значный код комнаты');
-        return;
-    }
-    
-    isHost = false;
-    const peerId = 'game-' + code;
-    initPeer();
-    
-    peer.on('open', () => {
-        connectToPeer(peerId);
+function bindEvents() {
+    el.soloBtn.addEventListener('click', () => startGame('solo'));
+    el.createRoomBtn.addEventListener('click', hostRoom);
+    el.joinRoomBtn.addEventListener('click', showJoinPanel);
+    el.joinBtn.addEventListener('click', joinRoom);
+    el.leaveBtn.addEventListener('click', endGame);
+    el.fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    el.roomCodeInput.addEventListener('input', () => {
+        el.roomCodeInput.value = el.roomCodeInput.value.replace(/\D/g, '').slice(0, 5);
     });
-});
 
-document.getElementById('leaveBtn').addEventListener('click', endGame);
-document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+    document.addEventListener('keydown', (event) => setKey(event, true));
+    document.addEventListener('keyup', (event) => setKey(event, false));
 
-// Keyboard Controls (PC)
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
-    if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
-    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') keys.jump = true;
-});
+    document.addEventListener('pointerlockchange', () => {
+        state.pointerLocked = document.pointerLockElement === renderer?.domElement;
+    });
+    document.addEventListener('mousemove', (event) => {
+        if (state.pointerLocked) lookBy(event.movementX, event.movementY);
+    });
 
-document.addEventListener('keyup', (e) => {
-    if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
-    if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
-    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') keys.jump = false;
-});
+    el.gameContainer.addEventListener('pointerdown', (event) => {
+        if (!state.running) return;
+        if (event.target.closest('#hud') || event.target.closest('#mobileControls') || event.target.closest('#joystickZone')) return;
+        requestPointerLock();
+    });
 
-// Touch Controls (Mobile) - Multitouch support
-document.getElementById('jumpBtn').addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    keys.jump = true;
-});
+    el.gameContainer.addEventListener('touchstart', handleLookTouchStart, { passive: false });
+    el.gameContainer.addEventListener('touchmove', handleLookTouchMove, { passive: false });
+    el.gameContainer.addEventListener('touchend', handleLookTouchEnd, { passive: false });
+    el.gameContainer.addEventListener('touchcancel', handleLookTouchEnd, { passive: false });
 
-document.getElementById('jumpBtn').addEventListener('touchend', (e) => {
-    e.preventDefault();
-    keys.jump = false;
-});
+    bindHoldButton(el.jumpBtn, (pressed) => {
+        state.keys.jump = pressed;
+    });
+}
 
-// Prevent default touch behaviors to enable multitouch
-document.addEventListener('touchmove', (e) => {
-    if (e.target.closest('#joystickZone') || e.target.closest('#mobileControls')) {
-        e.preventDefault();
+function bindHoldButton(button, onChange) {
+    button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        onChange(true);
+        button.setPointerCapture(event.pointerId);
+    });
+    button.addEventListener('pointerup', (event) => {
+        event.preventDefault();
+        onChange(false);
+    });
+    button.addEventListener('pointercancel', () => onChange(false));
+    button.addEventListener('lostpointercapture', () => onChange(false));
+}
+
+function handleLookTouchStart(event) {
+    if (!state.running) return;
+    for (const touch of event.changedTouches) {
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (target?.closest('#hud') || target?.closest('#mobileControls') || target?.closest('#joystickZone')) continue;
+        if (touch.clientX > window.innerWidth * 0.38 && state.lookTouchId === null) {
+            state.lookTouchId = touch.identifier;
+            state.lastLookTouch = { x: touch.clientX, y: touch.clientY };
+            event.preventDefault();
+            break;
+        }
     }
-}, { passive: false });
+}
+
+function handleLookTouchMove(event) {
+    if (state.lookTouchId === null) return;
+    for (const touch of event.changedTouches) {
+        if (touch.identifier !== state.lookTouchId) continue;
+        const dx = touch.clientX - state.lastLookTouch.x;
+        const dy = touch.clientY - state.lastLookTouch.y;
+        state.lastLookTouch = { x: touch.clientX, y: touch.clientY };
+        lookBy(dx, dy, 1.45);
+        event.preventDefault();
+        break;
+    }
+}
+
+function handleLookTouchEnd(event) {
+    if (state.lookTouchId === null) return;
+    for (const touch of event.changedTouches) {
+        if (touch.identifier === state.lookTouchId) {
+            state.lookTouchId = null;
+            state.lastLookTouch = null;
+            event.preventDefault();
+            break;
+        }
+    }
+}
+
+function setKey(event, pressed) {
+    const code = event.code;
+    if (code === 'KeyW' || code === 'ArrowUp') state.keys.forward = pressed;
+    if (code === 'KeyS' || code === 'ArrowDown') state.keys.backward = pressed;
+    if (code === 'KeyA' || code === 'ArrowLeft') state.keys.left = pressed;
+    if (code === 'KeyD' || code === 'ArrowRight') state.keys.right = pressed;
+    if (code === 'Space') {
+        state.keys.jump = pressed;
+        event.preventDefault();
+    }
+    if (code === 'ShiftLeft' || code === 'ShiftRight') state.keys.sprint = pressed;
+}
+
+bindEvents();

@@ -1,171 +1,274 @@
+:root {
+    --ink: #16202a;
+    --muted: #637083;
+    --panel: rgba(255, 255, 255, 0.92);
+    --line: rgba(22, 32, 42, 0.14);
+    --accent: #2f8f83;
+    --accent-strong: #236d65;
+    --danger: #c94c4c;
+}
+
 * {
-    margin: 0;
-    padding: 0;
     box-sizing: border-box;
 }
 
+html,
 body {
-    font-family: Arial, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    touch-action: none;
+    font-family: Arial, Helvetica, sans-serif;
+    color: var(--ink);
+    background: #d9eef0;
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    border: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.menu {
+    position: fixed;
+    inset: 0;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    overflow: hidden;
+    gap: 12px;
+    padding: 24px;
+    background:
+        linear-gradient(rgba(217, 238, 240, 0.78), rgba(241, 246, 232, 0.9)),
+        radial-gradient(circle at 70% 25%, rgba(255, 213, 128, 0.45), transparent 32%),
+        linear-gradient(135deg, #9ed4df, #dfe8bd 58%, #f0c98b);
 }
 
-#mainMenu {
-    background: white;
-    padding: 40px;
-    border-radius: 20px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-    text-align: center;
-    max-width: 400px;
-    width: 90%;
+.menu h1 {
+    margin: 0;
+    font-size: clamp(42px, 9vw, 92px);
+    line-height: 0.95;
+    letter-spacing: 0;
 }
 
-#mainMenu h1 {
-    color: #333;
-    margin-bottom: 30px;
-    font-size: 2.5em;
-}
-
-#mainMenu button {
-    width: 100%;
-    padding: 15px;
-    margin: 10px 0;
-    border: none;
-    border-radius: 10px;
+.subtitle {
+    margin: 0 0 18px;
+    color: var(--muted);
     font-size: 16px;
-    cursor: pointer;
-    transition: all 0.3s;
-    background: #667eea;
-    color: white;
-    font-weight: bold;
 }
 
-#mainMenu button:hover {
-    background: #764ba2;
-    transform: translateY(-2px);
+.menu > button,
+.panel button {
+    width: min(360px, 92vw);
+    min-height: 48px;
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    font-weight: 700;
+    box-shadow: 0 10px 24px rgba(40, 54, 72, 0.12);
 }
 
-#joinRoomSection {
-    margin-top: 20px;
+.menu > button:active,
+.panel button:active,
+.roundBtn:active {
+    transform: translateY(1px) scale(0.99);
+}
+
+.menu .primary,
+.panel .primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.panel {
+    width: min(360px, 92vw);
+    margin-top: 8px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 14px 32px rgba(40, 54, 72, 0.14);
+    text-align: center;
 }
 
 #roomCodeInput {
     width: 100%;
-    padding: 15px;
-    margin: 10px 0;
-    border: 2px solid #ddd;
-    border-radius: 10px;
-    font-size: 18px;
+    height: 52px;
+    margin-bottom: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
     text-align: center;
-    letter-spacing: 5px;
+    font-size: 26px;
+    letter-spacing: 8px;
+    color: var(--ink);
+    background: #fff;
 }
 
-#roomCodeDisplay {
-    margin-top: 20px;
-    padding: 20px;
-    background: #f0f0f0;
-    border-radius: 10px;
+.label {
+    color: var(--muted);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0;
 }
 
-#roomCodeDisplay strong {
-    font-size: 2em;
-    color: #667eea;
-    letter-spacing: 5px;
-}
-
-#gameContainer {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-}
-
-#gameCanvas {
+#roomCode {
     display: block;
-    background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+    margin: 4px 0 8px;
+    color: var(--accent-strong);
+    font-size: 46px;
+    letter-spacing: 8px;
+}
+
+#connectionStatus {
+    margin: 0;
+    color: var(--muted);
+}
+
+#gameContainer,
+#gameCanvas,
+#gameCanvas canvas {
+    position: fixed;
+    inset: 0;
     width: 100vw;
     height: 100vh;
+}
+
+#gameCanvas canvas {
+    display: block;
+}
+
+#reticle {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    z-index: 8;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.86);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+}
+
+#hud {
+    position: fixed;
+    top: max(14px, env(safe-area-inset-top));
+    left: 50%;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: calc(100vw - 24px);
+    min-height: 42px;
+    padding: 7px 9px 7px 12px;
+    border-radius: 8px;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid var(--line);
+    box-shadow: 0 8px 20px rgba(18, 32, 46, 0.12);
+    backdrop-filter: blur(10px);
+}
+
+#playerInfo,
+#netInfo {
+    white-space: nowrap;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+#netInfo {
+    color: var(--muted);
+    font-weight: 600;
+}
+
+#leaveBtn {
+    min-width: 62px;
+    height: 30px;
+    border-radius: 6px;
+    background: var(--danger);
+    color: white;
+    font-weight: 700;
 }
 
 #joystickZone {
     position: fixed;
-    bottom: 100px;
-    left: 50px;
-    width: 150px;
-    height: 150px;
-    z-index: 100;
+    left: max(20px, env(safe-area-inset-left));
+    bottom: max(32px, env(safe-area-inset-bottom));
+    z-index: 9;
+    width: 154px;
+    height: 154px;
 }
 
 #mobileControls {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
+    right: max(18px, env(safe-area-inset-right));
+    bottom: max(34px, env(safe-area-inset-bottom));
+    z-index: 9;
     display: flex;
-    gap: 15px;
-    z-index: 100;
+    gap: 12px;
 }
 
-#mobileControls button {
-    width: 80px;
-    height: 80px;
-    border: none;
+.roundBtn {
+    width: 74px;
+    height: 74px;
     border-radius: 50%;
-    font-size: 16px;
-    font-weight: bold;
-    background: rgba(255,255,255,0.9);
-    cursor: pointer;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    transition: all 0.1s;
-}
-
-#mobileControls button:active {
-    transform: scale(0.95);
-    background: rgba(255,255,255,1);
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.84);
+    border: 1px solid var(--line);
+    box-shadow: 0 8px 20px rgba(18, 32, 46, 0.16);
+    font-weight: 800;
+    backdrop-filter: blur(10px);
 }
 
 #fullscreenBtn {
     font-size: 28px;
 }
 
-#gameInfo {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 20px;
-    align-items: center;
-    background: rgba(255,255,255,0.9);
-    padding: 10px 20px;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-}
-
-#leaveBtn {
-    padding: 8px 15px;
-    border: none;
-    border-radius: 5px;
-    background: #ff6b6b;
-    color: white;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-#leaveBtn:hover {
-    background: #ee5a5a;
-}
-
-@media (min-width: 768px) {
+@media (hover: hover) and (pointer: fine) {
+    #joystickZone,
     #mobileControls {
         display: none;
     }
 }
 
-@media (max-width: 767px) {
-    #mobileControls {
-        display: flex;
+@media (max-width: 560px) {
+    #hud {
+        top: max(8px, env(safe-area-inset-top));
+        gap: 7px;
+        min-height: 36px;
+    }
+
+    #playerInfo,
+    #netInfo {
+        font-size: 12px;
+    }
+
+    #leaveBtn {
+        min-width: 54px;
+        height: 28px;
+        font-size: 12px;
+    }
+
+    #joystickZone {
+        width: 132px;
+        height: 132px;
+    }
+
+    .roundBtn {
+        width: 66px;
+        height: 66px;
+        font-size: 14px;
     }
 }

@@ -2,40 +2,50 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Multiplayer Platform Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>fffaa 3D P2P</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.1/dist/nipplejs.min.js"></script>
 </head>
 <body>
-    <div id="mainMenu">
-        <h1>🎮 Платформер</h1>
-        <button id="createRoomBtn">Создать комнату</button>
-        <button id="joinRoomBtn">Присоединиться к комнате</button>
-        <div id="joinRoomSection" style="display: none;">
-            <input type="text" id="roomCodeInput" placeholder="Введите код комнаты (5 цифр)" maxlength="5">
-            <button id="joinBtn">Подключиться</button>
-        </div>
-        <div id="roomCodeDisplay" style="display: none;">
-            <p>Код вашей комнаты: <strong id="roomCode"></strong></p>
-            <p>Ожидание игрока...</p>
-        </div>
-    </div>
+    <main id="mainMenu" class="menu">
+        <h1>fffaa 3D</h1>
+        <p class="subtitle">P2P-платформа с кодом на 5 цифр</p>
 
-    <div id="gameContainer" style="display: none;">
+        <button id="soloBtn" class="primary">Играть одному</button>
+        <button id="createRoomBtn">Создать комнату</button>
+        <button id="joinRoomBtn">Подключиться</button>
+
+        <section id="joinRoomSection" class="panel hidden">
+            <input id="roomCodeInput" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="12345" autocomplete="off">
+            <button id="joinBtn" class="primary">Войти по коду</button>
+        </section>
+
+        <section id="roomCodeDisplay" class="panel hidden">
+            <div class="label">Код комнаты</div>
+            <strong id="roomCode">-----</strong>
+            <p id="connectionStatus">Ожидание второго игрока...</p>
+        </section>
+    </main>
+
+    <section id="gameContainer" class="hidden" aria-label="Игровая сцена">
         <div id="gameCanvas"></div>
-        <div id="joystickZone"></div>
-        <div id="mobileControls">
-            <button id="jumpBtn">Прыжок</button>
-            <button id="fullscreenBtn">⛶</button>
+
+        <div id="hud">
+            <span id="playerInfo">Игрок</span>
+            <span id="netInfo">offline</span>
+            <button id="leaveBtn" title="Выйти">Выйти</button>
         </div>
-        <div id="gameInfo">
-            <span id="playerInfo">Игрок 1</span>
-            <button id="leaveBtn">Выйти</button>
+
+        <div id="reticle" aria-hidden="true"></div>
+        <div id="joystickZone" aria-label="Джойстик движения"></div>
+        <div id="mobileControls" aria-label="Мобильное управление">
+            <button id="jumpBtn" class="roundBtn" title="Прыжок">Прыг</button>
+            <button id="fullscreenBtn" class="roundBtn" title="Полный экран">⛶</button>
         </div>
-    </div>
+    </section>
 
     <script src="game.js"></script>
 </body>
