@@ -44,9 +44,10 @@ button {
     inset: 0;
     display: flex;
     background:
-        linear-gradient(rgba(122, 139, 146, 0.88), rgba(122, 139, 146, 0.92)),
-        radial-gradient(circle at 80% 30%, rgba(255, 210, 130, 0.35), transparent 45%),
-        linear-gradient(135deg, #4a5850, #6a7870 58%, #7a8b82);
+        linear-gradient(rgba(40, 50, 60, 0.9), rgba(35, 45, 55, 0.95)),
+        radial-gradient(circle at 20% 20%, rgba(80, 150, 160, 0.4), transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(200, 140, 80, 0.35), transparent 50%),
+        linear-gradient(135deg, #2a3a32, #3a4a42 40%, #4a5a52);
 }
 
 .menu-content {
@@ -90,18 +91,18 @@ button {
 
 .quality-buttons {
     display: flex;
-    gap: 10px;
+    gap: 8px;
 }
 
 .quality-btn {
     flex: 1;
-    height: 42px;
+    height: 40px;
     border-radius: 10px;
     background: #fff;
     color: var(--ink);
     border: 1px solid var(--line);
     font-weight: 700;
-    font-size: 15px;
+    font-size: 13px;
     transition: all 0.2s ease;
 }
 
@@ -115,6 +116,26 @@ button {
     color: #fff;
     border-color: var(--accent-strong);
     box-shadow: 0 7px 18px rgba(47, 143, 131, 0.45);
+}
+
+.auto-btn {
+    margin-top: 8px;
+    width: 100%;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #5a8a78, #3a6a58);
+    color: #fff;
+    border: 1px solid #2a4a38;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 6px 16px rgba(47, 143, 131, 0.35);
+}
+
+.auto-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(47, 143, 131, 0.45);
 }
 
 .menu-buttons {

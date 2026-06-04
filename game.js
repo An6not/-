@@ -961,31 +961,34 @@ function lookBy(deltaX, deltaY, multiplier = 1) {
 }
 
 function bindEvents() {
-    el.qualityMin.addEventListener('click', () => setQuality('min'));
-    el.qualityLow.addEventListener('click', () => setQuality('low'));
-    el.qualityMed.addEventListener('click', () => setQuality('med'));
-    el.qualityUltra.addEventListener('click', () => setQuality('ultra'));
-    el.autoQualityBtn.addEventListener('click', autoSetQuality);
+    // Безопасно добавляем события, только если элементы существуют
+    if (el.qualityMin) el.qualityMin.addEventListener('click', () => setQuality('min'));
+    if (el.qualityLow) el.qualityLow.addEventListener('click', () => setQuality('low'));
+    if (el.qualityMed) el.qualityMed.addEventListener('click', () => setQuality('med'));
+    if (el.qualityUltra) el.qualityUltra.addEventListener('click', () => setQuality('ultra'));
+    if (el.autoQualityBtn) el.autoQualityBtn.addEventListener('click', autoSetQuality);
     
-    el.soloBtn.addEventListener('click', () => startGame('solo'));
-    el.createRoomBtn.addEventListener('click', hostRoom);
-    el.joinRoomBtn.addEventListener('click', showJoinPanel);
-    el.joinBtn.addEventListener('click', joinRoom);
-    el.leaveBtn.addEventListener('click', endGame);
-    el.fullscreenBtn.addEventListener('click', toggleFullscreen);
-    el.flashlightBtn?.addEventListener('click', toggleFlashlight);
+    if (el.soloBtn) el.soloBtn.addEventListener('click', () => startGame('solo'));
+    if (el.createRoomBtn) el.createRoomBtn.addEventListener('click', hostRoom);
+    if (el.joinRoomBtn) el.joinRoomBtn.addEventListener('click', showJoinPanel);
+    if (el.joinBtn) el.joinBtn.addEventListener('click', joinRoom);
+    if (el.leaveBtn) el.leaveBtn.addEventListener('click', endGame);
+    if (el.fullscreenBtn) el.fullscreenBtn.addEventListener('click', toggleFullscreen);
+    if (el.flashlightBtn) el.flashlightBtn.addEventListener('click', toggleFlashlight);
 
-    el.roomCodeInput.addEventListener('input', () => {
-        el.roomCodeInput.value = el.roomCodeInput.value.replace(/\D/g, '').slice(0, 5);
-    });
+    if (el.roomCodeInput) {
+        el.roomCodeInput.addEventListener('input', () => {
+            el.roomCodeInput.value = el.roomCodeInput.value.replace(/\D/g, '').slice(0, 5);
+        });
+    }
 }
 
 function setQuality(quality) {
     currentQuality = quality;
-    el.qualityMin.classList.toggle('active', quality === 'min');
-    el.qualityLow.classList.toggle('active', quality === 'low');
-    el.qualityMed.classList.toggle('active', quality === 'med');
-    el.qualityUltra.classList.toggle('active', quality === 'ultra');
+    if (el.qualityMin) el.qualityMin.classList.toggle('active', quality === 'min');
+    if (el.qualityLow) el.qualityLow.classList.toggle('active', quality === 'low');
+    if (el.qualityMed) el.qualityMed.classList.toggle('active', quality === 'med');
+    if (el.qualityUltra) el.qualityUltra.classList.toggle('active', quality === 'ultra');
 }
 
 function autoSetQuality() {
@@ -1006,37 +1009,43 @@ function autoSetQuality() {
     }, 2000);
 }
 
-bindEvents();
+document.addEventListener('DOMContentLoaded', () => {
+    bindEvents();
+    // Инициализируем активную кнопку качества при загрузке
+    setQuality(currentQuality);
 
-// Инициализируем активную кнопку качества при загрузке
-setQuality(currentQuality);
+    document.addEventListener('keydown', (event) => setKey(event, true));
+    document.addEventListener('keyup', (event) => setKey(event, false));
 
-document.addEventListener('keydown', (event) => setKey(event, true));
-document.addEventListener('keyup', (event) => setKey(event, false));
+    document.addEventListener('pointerlockchange', () => {
+        state.pointerLocked = document.pointerLockElement === renderer?.domElement;
+    });
+    document.addEventListener('mousemove', (event) => {
+        if (state.pointerLocked) lookBy(event.movementX, event.movementY);
+    });
 
-document.addEventListener('pointerlockchange', () => {
-    state.pointerLocked = document.pointerLockElement === renderer?.domElement;
-});
-document.addEventListener('mousemove', (event) => {
-    if (state.pointerLocked) lookBy(event.movementX, event.movementY);
-});
+    if (el.gameContainer) {
+        el.gameContainer.addEventListener('pointerdown', (event) => {
+            if (!state.running) return;
+            if (event.target.closest('#hud') || event.target.closest('#mobileControls') || event.target.closest('#joystickZone')) return;
+            requestPointerLock();
+        });
 
-el.gameContainer.addEventListener('pointerdown', (event) => {
-    if (!state.running) return;
-    if (event.target.closest('#hud') || event.target.closest('#mobileControls') || event.target.closest('#joystickZone')) return;
-    requestPointerLock();
-});
+        el.gameContainer.addEventListener('touchstart', handleLookTouchStart, { passive: false });
+        el.gameContainer.addEventListener('touchmove', handleLookTouchMove, { passive: false });
+        el.gameContainer.addEventListener('touchend', handleLookTouchEnd, { passive: false });
+        el.gameContainer.addEventListener('touchcancel', handleLookTouchEnd, { passive: false });
+    }
 
-el.gameContainer.addEventListener('touchstart', handleLookTouchStart, { passive: false });
-el.gameContainer.addEventListener('touchmove', handleLookTouchMove, { passive: false });
-el.gameContainer.addEventListener('touchend', handleLookTouchEnd, { passive: false });
-el.gameContainer.addEventListener('touchcancel', handleLookTouchEnd, { passive: false });
-
-bindHoldButton(el.jumpBtn, (pressed) => {
-    state.keys.jump = pressed;
+    if (el.jumpBtn) {
+        bindHoldButton(el.jumpBtn, (pressed) => {
+            state.keys.jump = pressed;
+        });
+    }
 });
 
 function bindHoldButton(button, onChange) {
+    if (!button) return;
     button.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         onChange(true);
