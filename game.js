@@ -11,6 +11,7 @@ const state = {
     pointerLocked: false,
     lastNetSend: 0,
     sequence: 0,
+    walkTime: 0,
     yaw: 0,
     pitch: 0,
     lookTouchId: null,
@@ -33,7 +34,7 @@ let clock;
 let localPlayer;
 let remotePlayer;
 let joystick;
-let worldBounds = { x: 44, z: 44 };
+let worldBounds = { x: 58, z: 58 };
 
 const el = {
     menu: document.getElementById('mainMenu'),
@@ -215,53 +216,30 @@ function initScene() {
 }
 
 function addWorld() {
-    const hemi = new THREE.HemisphereLight(0xf4feff, 0x4f6a5f, 1.05);
+    const hemi = new THREE.HemisphereLight(0xf4feff, 0x5a7064, 1.08);
     scene.add(hemi);
 
     const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-    sun.position.set(18, 24, 10);
+    sun.position.set(20, 26, 14);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -45;
-    sun.shadow.camera.right = 45;
-    sun.shadow.camera.top = 45;
-    sun.shadow.camera.bottom = -45;
+    sun.shadow.camera.left = -64;
+    sun.shadow.camera.right = 64;
+    sun.shadow.camera.top = 64;
+    sun.shadow.camera.bottom = -64;
     scene.add(sun);
 
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x6cb879, roughness: 0.88 });
-    const ground = new THREE.Mesh(new THREE.BoxGeometry(92, 1, 92), groundMaterial);
+    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x70b77a, roughness: 0.9 });
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(120, 1, 120), groundMaterial);
     ground.position.y = -0.5;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const grid = new THREE.GridHelper(92, 46, 0xffffff, 0xffffff);
+    const grid = new THREE.GridHelper(120, 60, 0xffffff, 0xffffff);
     grid.position.y = 0.015;
-    grid.material.opacity = 0.2;
+    grid.material.opacity = 0.16;
     grid.material.transparent = true;
     scene.add(grid);
-
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x536f68, roughness: 0.8 });
-    addWall(0, 1.4, -46, 92, 2.8, 1, wallMaterial);
-    addWall(0, 1.4, 46, 92, 2.8, 1, wallMaterial);
-    addWall(-46, 1.4, 0, 1, 2.8, 92, wallMaterial);
-    addWall(46, 1.4, 0, 1, 2.8, 92, wallMaterial);
-
-    const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x7f7a61, roughness: 0.84 });
-    addBox(-16, 0.55, -10, 8, 1.1, 5, obstacleMaterial);
-    addBox(18, 0.55, 11, 10, 1.1, 6, obstacleMaterial);
-    addBox(4, 0.35, -22, 12, 0.7, 4, obstacleMaterial);
-}
-
-function addWall(x, y, z, w, h, d, material) {
-    addBox(x, y, z, w, h, d, material);
-}
-
-function addBox(x, y, z, w, h, d, material) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
 }
 
 function makePlayers() {
@@ -281,7 +259,9 @@ function makePlayers() {
 
 function createPlayer(color, x, z) {
     const group = new THREE.Group();
-    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.55 });
+    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.02 });
+    const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x111820, roughness: 0.55 });
+    const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45 });
 
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 1.25, 18), material);
     body.position.y = 0.78;
@@ -293,18 +273,48 @@ function createPlayer(color, x, z) {
     head.castShadow = true;
     group.add(head);
 
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.22, 14), material);
+    neck.position.y = 1.28;
+    neck.castShadow = true;
+    group.add(neck);
+
     const face = new THREE.Mesh(
-        new THREE.BoxGeometry(0.16, 0.08, 0.04),
-        new THREE.MeshStandardMaterial({ color: 0x111820, roughness: 0.5 })
+        new THREE.BoxGeometry(0.28, 0.12, 0.05),
+        darkMaterial
     );
     face.position.set(0, 1.62, -0.39);
     group.add(face);
+
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.05), trimMaterial);
+    chest.position.set(0, 0.98, -0.42);
+    group.add(chest);
+
+    const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.82, 0.2), material);
+    leftArm.position.set(-0.54, 0.84, -0.02);
+    leftArm.rotation.z = 0.14;
+    leftArm.castShadow = true;
+    group.add(leftArm);
+
+    const rightArm = leftArm.clone();
+    rightArm.position.x = 0.54;
+    rightArm.rotation.z = -0.14;
+    group.add(rightArm);
+
+    const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.72, 0.24), material);
+    leftLeg.position.set(-0.18, 0.28, 0);
+    leftLeg.castShadow = true;
+    group.add(leftLeg);
+
+    const rightLeg = leftLeg.clone();
+    rightLeg.position.x = 0.18;
+    group.add(rightLeg);
 
     group.position.set(x, 0, z);
     scene.add(group);
 
     return {
         mesh: group,
+        parts: { leftArm, rightArm, leftLeg, rightLeg },
         velocity: new THREE.Vector3(),
         radius: 0.42,
         eyeHeight: 1.62,
@@ -405,8 +415,9 @@ function updateLocalPlayer(dt) {
     const sin = Math.sin(state.yaw);
     const cos = Math.cos(state.yaw);
 
-    const worldX = move.x * cos - move.z * sin;
-    const worldZ = move.x * sin + move.z * cos;
+    const worldX = move.x * cos + move.z * sin;
+    const worldZ = -move.x * sin + move.z * cos;
+    const horizontalSpeed = Math.hypot(worldX, worldZ) * speed;
 
     localPlayer.velocity.x = worldX * speed;
     localPlayer.velocity.z = worldZ * speed;
@@ -423,6 +434,7 @@ function updateLocalPlayer(dt) {
 
     collideArena(localPlayer);
     localPlayer.mesh.rotation.y = state.yaw;
+    animatePlayer(localPlayer, horizontalSpeed, dt);
 }
 
 function getMoveInput() {
@@ -463,10 +475,21 @@ function collideArena(player) {
 
 function updateCamera() {
     const p = localPlayer.mesh.position;
-    camera.position.set(p.x, p.y + localPlayer.eyeHeight, p.z);
+    const moving = Math.hypot(localPlayer.velocity.x, localPlayer.velocity.z);
+    if (localPlayer.onGround && moving > 0.2) {
+        state.walkTime += moving * 0.018;
+    } else {
+        state.walkTime *= 0.9;
+    }
+
+    const bobPower = localPlayer.onGround ? THREE.MathUtils.clamp(moving / localPlayer.sprintSpeed, 0, 1) : 0;
+    const bobY = Math.sin(state.walkTime * 10) * 0.045 * bobPower;
+    const bobX = Math.sin(state.walkTime * 5) * 0.022 * bobPower;
+
+    camera.position.set(p.x + bobX, p.y + localPlayer.eyeHeight + bobY, p.z);
     camera.rotation.order = 'YXZ';
     camera.rotation.y = state.yaw;
-    camera.rotation.x = state.pitch;
+    camera.rotation.x = state.pitch + Math.sin(state.walkTime * 10 + 0.8) * 0.006 * bobPower;
 }
 
 function updateRemotePlayer(now) {
@@ -493,10 +516,23 @@ function updateRemotePlayer(now) {
         const dt = Math.min((renderTime - latest.time) / 1000, 0.12);
         targetPosition = latest.position.clone().addScaledVector(latest.velocity, Math.max(0, dt));
         targetYaw = latest.yaw;
+        remotePlayer.velocity.copy(latest.velocity);
     }
 
     remotePlayer.mesh.position.lerp(targetPosition, 0.42);
     remotePlayer.mesh.rotation.y = lerpAngle(remotePlayer.mesh.rotation.y, targetYaw, 0.35);
+    animatePlayer(remotePlayer, remotePlayer.velocity.length(), 1 / 60);
+}
+
+function animatePlayer(player, speed, dt) {
+    if (!player.parts) return;
+    const moving = speed > 0.15;
+    player.walkTime = (player.walkTime || 0) + (moving ? speed * dt * 4.5 : dt * 2);
+    const swing = moving ? Math.sin(player.walkTime) * 0.42 : 0;
+    player.parts.leftArm.rotation.x = swing;
+    player.parts.rightArm.rotation.x = -swing;
+    player.parts.leftLeg.rotation.x = -swing * 0.72;
+    player.parts.rightLeg.rotation.x = swing * 0.72;
 }
 
 function smoothstep(t) {
@@ -568,7 +604,7 @@ function isTouchDevice() {
 }
 
 function lookBy(deltaX, deltaY, multiplier = 1) {
-    state.yaw -= deltaX * 0.0026 * multiplier;
+    state.yaw -= deltaX * 0.0024 * multiplier;
     state.pitch -= deltaY * 0.0022 * multiplier;
     state.pitch = THREE.MathUtils.clamp(state.pitch, -1.35, 1.35);
 }
