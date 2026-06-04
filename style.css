@@ -86,33 +86,48 @@ body {
 #gameCanvas {
     display: block;
     background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+    width: 100vw;
+    height: 100vh;
+}
+
+#joystickZone {
+    position: fixed;
+    bottom: 100px;
+    left: 50px;
+    width: 150px;
+    height: 150px;
+    z-index: 100;
 }
 
 #mobileControls {
     position: fixed;
     bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    right: 20px;
     display: flex;
     gap: 15px;
     z-index: 100;
 }
 
 #mobileControls button {
-    width: 70px;
-    height: 70px;
+    width: 80px;
+    height: 80px;
     border: none;
     border-radius: 50%;
-    font-size: 24px;
-    background: rgba(255,255,255,0.8);
+    font-size: 16px;
+    font-weight: bold;
+    background: rgba(255,255,255,0.9);
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     transition: all 0.1s;
 }
 
 #mobileControls button:active {
     transform: scale(0.95);
     background: rgba(255,255,255,1);
+}
+
+#fullscreenBtn {
+    font-size: 28px;
 }
 
 #gameInfo {

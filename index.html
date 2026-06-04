@@ -6,6 +6,8 @@
     <title>Multiplayer Platform Game</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.1/dist/nipplejs.min.js"></script>
 </head>
 <body>
     <div id="mainMenu">
@@ -23,11 +25,11 @@
     </div>
 
     <div id="gameContainer" style="display: none;">
-        <canvas id="gameCanvas"></canvas>
+        <div id="gameCanvas"></div>
+        <div id="joystickZone"></div>
         <div id="mobileControls">
-            <button id="leftBtn">←</button>
-            <button id="jumpBtn">↑</button>
-            <button id="rightBtn">→</button>
+            <button id="jumpBtn">Прыжок</button>
+            <button id="fullscreenBtn">⛶</button>
         </div>
         <div id="gameInfo">
             <span id="playerInfo">Игрок 1</span>
